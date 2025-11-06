@@ -1,13 +1,12 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
 import logging
-import os
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
 import litellm
-from litellm import CustomLLM
+from litellm.llms.custom_llm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 
 from agentllm.agents.release_manager import ReleaseManager
@@ -23,7 +22,9 @@ log_file = Path(log_dir) / "agno_handler.log"
 # File handler for detailed logs
 file_handler = logging.FileHandler(log_file)
 file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
 
 # Console handler for important logs only
 console_handler = logging.StreamHandler()
@@ -48,7 +49,9 @@ class AgnoCustomLLM(CustomLLM):
         self._agent_cache: dict[tuple, Any] = {}
         logger.info("Initialized AgnoCustomLLM with agent caching")
 
-    def _extract_session_info(self, kwargs: dict[str, Any]) -> tuple[str | None, str | None]:
+    def _extract_session_info(
+        self, kwargs: dict[str, Any]
+    ) -> tuple[str | None, str | None]:
         """Extract session_id and user_id from request kwargs.
 
         Checks multiple sources in priority order:
@@ -75,13 +78,17 @@ class AgnoCustomLLM(CustomLLM):
         if body_metadata:
             session_id = body_metadata.get("session_id") or body_metadata.get("chat_id")
             user_id = body_metadata.get("user_id")
-            logger.info(f"Found in body metadata: session_id={session_id}, user_id={user_id}")
+            logger.info(
+                f"Found in body metadata: session_id={session_id}, user_id={user_id}"
+            )
 
         # 2. Check OpenWebUI headers (ENABLE_FORWARD_USER_INFO_HEADERS)
         headers = litellm_params.get("metadata", {}).get("headers", {})
         if not session_id and headers:
             # Check for chat_id header (might be X-OpenWebUI-Chat-Id)
-            session_id = headers.get("x-openwebui-chat-id") or headers.get("X-OpenWebUI-Chat-Id")
+            session_id = headers.get("x-openwebui-chat-id") or headers.get(
+                "X-OpenWebUI-Chat-Id"
+            )
             logger.info(f"Found in headers: session_id={session_id}")
 
         if not user_id and headers:
@@ -110,12 +117,18 @@ class AgnoCustomLLM(CustomLLM):
                 logger.info(f"Found in user field: user_id={user_id}")
 
         # Log what we're using
-        logger.info(f"Final extracted session info: user_id={user_id}, session_id={session_id}")
+        logger.info(
+            f"Final extracted session info: user_id={user_id}, session_id={session_id}"
+        )
 
         # Log full structure for debugging (only if nothing found)
         if not session_id and not user_id:
-            logger.warning("No session/user info found! Logging full request structure:")
-            logger.warning(f"Headers available: {list(headers.keys()) if headers else 'None'}")
+            logger.warning(
+                "No session/user info found! Logging full request structure:"
+            )
+            logger.warning(
+                f"Headers available: {list(headers.keys()) if headers else 'None'}"
+            )
             logger.warning(
                 f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}"
             )
@@ -160,10 +173,12 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Creating new agent for key: {cache_key}")
 
         # Instantiate the agent class based on agent_name
-        if agent_name == "release-manager":
+        if agent_name in ["release-manager", "oparl-topic-summary"]:
             agent = ReleaseManager(temperature=temperature, max_tokens=max_tokens)
         else:
-            raise Exception(f"Agent '{agent_name}' not found. Only 'release-manager' is available.")
+            raise Exception(
+                f"Agent '{agent_name}' not found. Only 'release-manager' is available."
+            )
 
         self._agent_cache[cache_key] = agent
         logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
@@ -246,13 +261,17 @@ class AgnoCustomLLM(CustomLLM):
             )
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
 
         # Run the agent with session management
-        response = agent.run(user_message, stream=False, session_id=session_id, user_id=user_id)
+        response = agent.run(
+            user_message, stream=False, session_id=session_id, user_id=user_id
+        )
 
         # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
@@ -307,8 +326,12 @@ class AgnoCustomLLM(CustomLLM):
                 "completion_tokens": (
                     result.usage.get("completion_tokens", 0) if result.usage else 0
                 ),
-                "prompt_tokens": (result.usage.get("prompt_tokens", 0) if result.usage else 0),
-                "total_tokens": (result.usage.get("total_tokens", 0) if result.usage else 0),
+                "prompt_tokens": (
+                    result.usage.get("prompt_tokens", 0) if result.usage else 0
+                ),
+                "total_tokens": (
+                    result.usage.get("total_tokens", 0) if result.usage else 0
+                ),
             },
         }
 
@@ -337,7 +360,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -376,7 +401,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)

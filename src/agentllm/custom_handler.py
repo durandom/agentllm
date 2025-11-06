@@ -1,14 +1,11 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
 import logging
-import time
-from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 import litellm
-from litellm import CustomLLM
+from litellm.llms.custom_llm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
-from agno.db.sqlite import SqliteDb
 
 from agentllm.agents.examples import get_agent
 
@@ -169,7 +166,9 @@ class AgnoCustomLLM(CustomLLM):
         # Create new agent and cache it
         logger.info(f"Creating new agent for key: {cache_key}")
         try:
-            agent = get_agent(agent_name, temperature=temperature, max_tokens=max_tokens)
+            agent = get_agent(
+                agent_name, temperature=temperature, max_tokens=max_tokens
+            )
             self._agent_cache[cache_key] = agent
             logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
             return agent
@@ -253,7 +252,9 @@ class AgnoCustomLLM(CustomLLM):
             )
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -350,7 +351,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -389,7 +392,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)

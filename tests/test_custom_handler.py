@@ -13,8 +13,7 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         response = handler.completion(
-            model="agno/echo",
-            messages=[{"role": "user", "content": "Hello!"}]
+            model="agno/echo", messages=[{"role": "user", "content": "Hello!"}]
         )
 
         assert response is not None
@@ -29,10 +28,7 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         # Should work with just "echo"
-        response = handler.completion(
-            model="echo",
-            messages=[{"role": "user", "content": "Test"}]
-        )
+        response = handler.completion(model="echo", messages=[{"role": "user", "content": "Test"}])
 
         assert response is not None
         assert response.choices[0]["message"]["role"] == "assistant"
@@ -43,8 +39,7 @@ class TestAgnoCustomLLM:
 
         with pytest.raises(Exception) as exc_info:
             handler.completion(
-                model="agno/nonexistent",
-                messages=[{"role": "user", "content": "Test"}]
+                model="agno/nonexistent", messages=[{"role": "user", "content": "Test"}]
             )
 
         assert "not found" in str(exc_info.value).lower()
@@ -58,7 +53,7 @@ class TestAgnoCustomLLM:
             messages=[
                 {"role": "system", "content": "You are helpful"},
                 {"role": "user", "content": "This is my message"},
-            ]
+            ],
         )
 
         assert response is not None
@@ -70,9 +65,7 @@ class TestAgnoCustomLLM:
 
         # Request with stream=True should return iterator
         result = handler.completion(
-            model="echo",
-            messages=[{"role": "user", "content": "Stream this"}],
-            stream=True
+            model="echo", messages=[{"role": "user", "content": "Stream this"}], stream=True
         )
 
         # Should be an iterator/generator
@@ -90,17 +83,14 @@ class TestAgnoCustomLLM:
 
         # Check it was registered
         assert len(litellm.custom_provider_map) > 0
-        assert any(
-            p.get("provider") == "agno" for p in litellm.custom_provider_map
-        )
+        assert any(p.get("provider") == "agno" for p in litellm.custom_provider_map)
 
     def test_model_response_structure(self):
         """Test that ModelResponse has correct structure."""
         handler = AgnoCustomLLM()
 
         response = handler.completion(
-            model="assistant",
-            messages=[{"role": "user", "content": "Test"}]
+            model="assistant", messages=[{"role": "user", "content": "Test"}]
         )
 
         # Check required fields

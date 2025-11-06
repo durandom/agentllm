@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Optional
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
 from agno.db.sqlite import SqliteDb
+from agno.models.openai import OpenAIChat
 
 # Shared database for all agents to enable session management
 DB_PATH = Path("tmp/agno_sessions.db")
@@ -16,7 +16,7 @@ shared_db = SqliteDb(db_file=str(DB_PATH))
 def create_echo_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    **model_kwargs
+    **model_kwargs,
 ) -> Agent:
     """Create a simple echo agent that repeats back what it receives.
 
@@ -52,7 +52,7 @@ def create_echo_agent(
 def create_assistant_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    **model_kwargs
+    **model_kwargs,
 ) -> Agent:
     """Create a general-purpose assistant agent.
 
@@ -89,7 +89,7 @@ def create_assistant_agent(
 def create_code_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    **model_kwargs
+    **model_kwargs,
 ) -> Agent:
     """Create a coding assistant agent.
 
@@ -136,7 +136,7 @@ def get_agent(
     agent_name: str,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    **model_kwargs
+    **model_kwargs,
 ) -> Agent:
     """Get an agent by name with optional model parameters.
 
@@ -154,13 +154,8 @@ def get_agent(
     """
     if agent_name not in AGENT_REGISTRY:
         raise KeyError(
-            f"Agent '{agent_name}' not found. "
-            f"Available agents: {', '.join(AGENT_REGISTRY.keys())}"
+            f"Agent '{agent_name}' not found. Available agents: {', '.join(AGENT_REGISTRY.keys())}"
         )
 
     creator_func = AGENT_REGISTRY[agent_name]
-    return creator_func(
-        temperature=temperature,
-        max_tokens=max_tokens,
-        **model_kwargs
-    )
+    return creator_func(temperature=temperature, max_tokens=max_tokens, **model_kwargs)

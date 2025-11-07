@@ -18,17 +18,17 @@ model_list:
       description: "General-purpose helpful assistant"
       mode: chat
 
-  - model_name: agno/code-helper
+  - model_name: agno/oparl-topic-summary
     litellm_params:
-      model: agno/code-helper
+      model: agno/oparl-topic-summary
       custom_llm_provider: agno
     model_info:
-      description: "Coding assistant for programming tasks"
+      description: "This Agent helps you summarizing OParl data"
       mode: chat
 
 # General configuration
 general_settings:
-  master_key: "sk-agno-test-key-12345"  # Change this in production!
+  master_key: "sk-agno-test-key-12345" # Change this in production!
 
   # Map OpenWebUI headers to LiteLLM user tracking
   # Enable ENABLE_FORWARD_USER_INFO_HEADERS=true in OpenWebUI
@@ -40,8 +40,8 @@ general_settings:
       litellm_user_role: customer
 
 litellm_settings:
-  drop_params: true  # Drop unsupported params instead of erroring
-  set_verbose: false  # Disable verbose logging
+  drop_params: true # Drop unsupported params instead of erroring
+  set_verbose: false # Disable verbose logging
   json_logs: false
   # Redirect LiteLLM logs to file
   success_callback: []
@@ -55,6 +55,5 @@ litellm_settings:
 server:
   host: 0.0.0.0
   port: 8890
-
 # Environment variables needed
 # OPENAI_API_KEY or other LLM provider keys for the underlying Agno agents

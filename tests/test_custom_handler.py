@@ -28,7 +28,9 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         # Should work with just "echo"
-        response = handler.completion(model="echo", messages=[{"role": "user", "content": "Test"}])
+        response = handler.completion(
+            model="echo", messages=[{"role": "user", "content": "Test"}]
+        )
 
         assert response is not None
         assert response.choices[0]["message"]["role"] == "assistant"
@@ -65,7 +67,9 @@ class TestAgnoCustomLLM:
 
         # Request with stream=True should return iterator
         result = handler.completion(
-            model="echo", messages=[{"role": "user", "content": "Stream this"}], stream=True
+            model="echo",
+            messages=[{"role": "user", "content": "Stream this"}],
+            stream=True,
         )
 
         # Should be an iterator/generator

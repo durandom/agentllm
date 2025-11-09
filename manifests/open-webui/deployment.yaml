@@ -1,0 +1,61 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: openwebui
+  labels:
+    app: openwebui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openwebui
+  template:
+    metadata:
+      labels:
+        app: openwebui
+    spec:
+      serviceAccount: openwebui
+      containers:
+        - name: openwebui
+          image: ghcr.io/open-webui/open-webui:main
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama:11434"
+            - name: ENABLE_OAUTH_SIGNUP
+              value: "true"
+            - name: OAUTH_CLIENT_ID
+              value: openwebui
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui
+                  key: oauth-client-secret
+            - name: OPENID_PROVIDER_URL
+              value: https://keycloak.erdgeschoss.b4mad.net/realms/erdgeschoss/.well-known/openid-configuration
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui
+                  key: webui-secret-key
+            - name: ENABLE_FORWARD_USER_INFO_HEADER
+              value: "true"
+            - name: OPENAI_API_BASE_URLS
+              value: http://agentllm:8890/v1
+            - name: OPENAI_API_KEYS
+              value: sk-agno-test-key-12345
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              memory: 500Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: openwebui-data
+              mountPath: /app/backend/data
+      volumes:
+        - name: openwebui-data
+          persistentVolumeClaim:
+            claimName: openwebui-data

@@ -13,8 +13,11 @@ labels:
       app.kubernetes.io/environment: stage
 
 resources:
-  - ../../base
-  - secret.yaml
+  - ../../agentllm
+  - ../../open-webui
+  - agentllm_secret.yaml
+  - open-webui_secret.yaml
+  - ingress.yaml
 
 replicas:
   - name: agentllm
@@ -23,7 +26,7 @@ replicas:
 images:
   - name: agentllm
     newName: codeberg.org/b4mad/agentllm/agentllm
-    newTag: v0.1.0-d6f41ac
+    newTag: v0.1.0-8472087
 
 patches:
   - target:

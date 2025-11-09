@@ -1,6 +1,7 @@
 """This is the agent registry."""
 
 import inspect
+import os
 from functools import partial
 from pathlib import Path
 from typing import Optional
@@ -15,7 +16,7 @@ from agentllm.agents.examples import (
 )
 from agentllm.agents.oparl_lite import create_oparl_topic_summary
 
-DB_PATH = Path("tmp/agno_sessions.db")
+DB_PATH = Path(os.getenv("AGENTLLM_DB_PATH", "db/agno_sessions.db"))
 DB_PATH.parent.mkdir(exist_ok=True)
 
 shared_db = SqliteDb(db_file=str(DB_PATH))

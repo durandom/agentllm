@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 import litellm
@@ -14,19 +15,20 @@ from agentllm.agents import get_agent
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# File handler for detailed logs
-file_handler = logging.FileHandler("agno_handler.log")
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
+# File handler for detailed logs (only enabled if AGNO_LOG_FILE is set)
+if os.getenv("AGNO_LOG_FILE"):
+    file_handler = logging.FileHandler("agno_handler.log")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(file_handler)
 
 # Console handler for important logs only
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter("[AGNO] %(levelname)s: %(message)s"))
 
-logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 
@@ -74,7 +76,7 @@ class AgnoCustomLLM(CustomLLM):
             session_id = body_metadata.get("session_id") or body_metadata.get("chat_id")
             user_id = body_metadata.get("user_id")
             logger.info(
-                f"Found in body metadata: session_id={session_id}, user_id={user_id}"
+                "Found in body metadata: session_id=%s, user_id=%s", session_id, user_id
             )
 
         # 2. Check OpenWebUI headers (ENABLE_FORWARD_USER_INFO_HEADERS)
@@ -84,7 +86,7 @@ class AgnoCustomLLM(CustomLLM):
             session_id = headers.get("x-openwebui-chat-id") or headers.get(
                 "X-OpenWebUI-Chat-Id"
             )
-            logger.info(f"Found in headers: session_id={session_id}")
+            logger.info("Found in headers: session_id=%s", session_id)
 
         if not user_id and headers:
             # Check for user_id header
@@ -94,7 +96,7 @@ class AgnoCustomLLM(CustomLLM):
                 or headers.get("x-openwebui-user-email")
                 or headers.get("X-OpenWebUI-User-Email")
             )
-            logger.info(f"Found in headers: user_id={user_id}")
+            logger.info("Found in headers: user_id=%s", user_id)
 
         # 3. Check LiteLLM metadata
         if not session_id and "litellm_params" in kwargs:
@@ -103,17 +105,17 @@ class AgnoCustomLLM(CustomLLM):
                 "conversation_id"
             )
             if session_id:
-                logger.info(f"Found in LiteLLM metadata: session_id={session_id}")
+                logger.info("Found in LiteLLM metadata: session_id=%s", session_id)
 
         # 4. Fallback to user field
         if not user_id:
             user_id = kwargs.get("user")
             if user_id:
-                logger.info(f"Found in user field: user_id={user_id}")
+                logger.info("Found in user field: user_id=%s", user_id)
 
         # Log what we're using
         logger.info(
-            f"Final extracted session info: user_id={user_id}, session_id={session_id}"
+            "Final extracted session info: user_id=%s, session_id=%s", user_id, session_id
         )
 
         # Log full structure for debugging (only if nothing found)
@@ -122,13 +124,13 @@ class AgnoCustomLLM(CustomLLM):
                 "No session/user info found! Logging full request structure:"
             )
             logger.warning(
-                f"Headers available: {list(headers.keys()) if headers else 'None'}"
+                "Headers available: %s", list(headers.keys()) if headers else 'None'
             )
             logger.warning(
-                f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}"
+                "Body metadata keys: %s", list(body_metadata.keys()) if body_metadata else 'None'
             )
             logger.warning(
-                f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}"
+                "LiteLLM metadata keys: %s", list(litellm_params.get('metadata', {}).keys())
             )
 
         return session_id, user_id
@@ -161,20 +163,20 @@ class AgnoCustomLLM(CustomLLM):
 
         # Check if agent exists in cache
         if cache_key in self._agent_cache:
-            logger.info(f"Using cached agent for key: {cache_key}")
+            logger.info("Using cached agent for key: %s", cache_key)
             return self._agent_cache[cache_key]
 
         # Create new agent and cache it
-        logger.info(f"Creating new agent for key: {cache_key}")
+        logger.info("Creating new agent for key: %s", cache_key)
         try:
             agent = await get_agent(
                 agent_name, temperature=temperature, max_tokens=max_tokens
             )
             self._agent_cache[cache_key] = agent
-            logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
+            logger.info("Cached agent. Total cached agents: %s", len(self._agent_cache))
             return agent
         except KeyError as e:
-            raise Exception(f"Agent '{agent_name}' not found. {e}")
+            raise KeyError(f"Agent '{agent_name}' not found: {e}") from e
 
     def _build_response(self, model: str, content: str) -> ModelResponse:
         """Build a ModelResponse from agent output.
@@ -236,9 +238,9 @@ class AgnoCustomLLM(CustomLLM):
         Returns:
             ModelResponse object
         """
-        logger.info(f"completion() called with model={model}")
-        logger.info(f"kwargs: {kwargs}")
-        logger.info(f"messages: {messages}")
+        logger.info("completion() called with model=%s", model)
+        logger.info("kwargs: %s", kwargs)
+        logger.info("messages: %s", messages)
 
         # Check if streaming is requested
         stream = kwargs.get("stream", False)
@@ -356,9 +358,9 @@ class AgnoCustomLLM(CustomLLM):
         Returns:
             ModelResponse object
         """
-        logger.info(f"acompletion() called with model={model}")
-        logger.info(f"kwargs: {kwargs}")
-        logger.info(f"messages: {messages}")
+        logger.info("acompletion() called with model=%s", model)
+        logger.info("kwargs: %s", kwargs)
+        logger.info("messages: %s", messages)
 
         # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(
@@ -397,9 +399,9 @@ class AgnoCustomLLM(CustomLLM):
         Yields:
             GenericStreamingChunk dictionaries with text field
         """
-        logger.info(f"astreaming() called with model={model}")
-        logger.info(f"kwargs: {kwargs}")
-        logger.info(f"messages: {messages}")
+        logger.info("astreaming() called with model=%s", model)
+        logger.info("kwargs: %s", kwargs)
+        logger.info("messages: %s", messages)
 
         # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(

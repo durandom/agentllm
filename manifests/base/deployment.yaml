@@ -43,22 +43,16 @@ spec:
               mountPath: /db
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/liveness
               port: http
-              httpHeaders:
-                - name: Authorization
-                  value: "Bearer sk-agno-test-key-12345"
             initialDelaySeconds: 40
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/readiness
               port: http
-              httpHeaders:
-                - name: Authorization
-                  value: "Bearer sk-agno-test-key-12345"
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5

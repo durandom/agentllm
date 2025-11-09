@@ -16,7 +16,7 @@ services:
       GDRIVE_CLIENT_SECRET: "${GDRIVE_CLIENT_SECRET}"
 
       # Database configuration
-      DB_PATH: "/app/tmp/agno_sessions.db"
+      AGENTLLM_DB_PATH: "/db/agno_sessions.db"
 
       # Python configuration
       PYTHONUNBUFFERED: "1"
@@ -25,7 +25,7 @@ services:
       # Mount local code for development (hot reload)
       - ./src/agentllm:/app/agentllm
       # Persist database and workspace
-      - litellm-data:/app/tmp
+      - litellm-db:/db
       # Mount config at app root for proper imports
       - ./src/agentllm/proxy_config.yaml:/app/proxy_config.yaml:ro
     restart: unless-stopped
@@ -77,4 +77,4 @@ services:
 
 volumes:
   open-webui:
-  litellm-data:
+  litellm-db:

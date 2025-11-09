@@ -18,7 +18,7 @@ if "GOOGLE_API_KEY" not in os.environ and "GEMINI_API_KEY" in os.environ:
     os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
 # Shared database for all agents to enable session management
-DB_PATH = Path("tmp/agno_sessions.db")
+DB_PATH = Path(os.getenv("AGENTLLM_DB_PATH", "tmp/agno_sessions.db"))
 DB_PATH.parent.mkdir(exist_ok=True)
 shared_db = SqliteDb(db_file=str(DB_PATH))
 
@@ -103,7 +103,9 @@ class ReleaseManager:
         for config in self.toolkit_configs:
             if config.requires_agent_recreation(config_name):
                 self._invalidate_agent(user_id)
-                logger.info(f"Config '{config_name}' requires agent recreation for user {user_id}")
+                logger.info(
+                    f"Config '{config_name}' requires agent recreation for user {user_id}"
+                )
                 break
 
     def _get_or_create_agent(self, user_id: str) -> Agent:
@@ -302,7 +304,9 @@ class ReleaseManager:
             logger.error(f"Failed to run agent for user {user_id}: {e}")
             return self._create_simple_response(error_msg)
 
-    async def _arun_non_streaming(self, message: str, user_id: str | None = None, **kwargs):
+    async def _arun_non_streaming(
+        self, message: str, user_id: str | None = None, **kwargs
+    ):
         """Internal async method for non-streaming mode."""
         # Check configuration and handle if needed
         config_response = self._handle_configuration(message, user_id)

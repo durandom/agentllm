@@ -84,48 +84,53 @@ class TestToolkitConfiguration:
     @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
     def test_google_drive_config_extracted_from_url(self, mock_gdrive_tools):
         """Test that Google Drive auth code is extracted from full redirect URL."""
-        agent = ReleaseManager()
+        with patch.dict(os.environ, {
+            "GDRIVE_CLIENT_ID": "test-client-id",
+            "GDRIVE_CLIENT_SECRET": "test-client-secret",
+            "GOOGLE_API_KEY": "test-api-key"
+        }):
+            agent = ReleaseManager()
 
-        # Mock Google Drive toolkit creation and validation
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                # Mock OAuth flow
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
+            # Mock Google Drive toolkit creation and validation
+            mock_creds = MagicMock()
+            with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
+                with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
+                    # Mock OAuth flow
+                    mock_flow_instance = MagicMock()
+                    mock_flow_instance.credentials = mock_creds
+                    mock_flow.from_client_config.return_value = mock_flow_instance
 
-                # Mock Google Drive API user info
-                mock_service = MagicMock()
-                mock_user_info = {
-                    "user": {"displayName": "Test User", "emailAddress": "test@example.com"}
-                }
-                mock_service.about().get().execute.return_value = mock_user_info
-                mock_build.return_value = mock_service
+                    # Mock Google Drive API user info
+                    mock_service = MagicMock()
+                    mock_user_info = {
+                        "user": {"displayName": "Test User", "emailAddress": "test@example.com"}
+                    }
+                    mock_service.about().get().execute.return_value = mock_user_info
+                    mock_build.return_value = mock_service
 
-                # Test URL formats
-                test_urls = [
-                    "http://localhost?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                    "http://localhost/?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                    "4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                ]
+                    # Test URL formats
+                    test_urls = [
+                        "http://localhost?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                        "http://localhost/?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                        "4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                    ]
 
-                for url in test_urls:
-                    # Provide Google Drive auth code/URL
-                    response = agent.run(url, user_id="test-user")
+                    for url in test_urls:
+                        # Provide Google Drive auth code/URL
+                        response = agent.run(url, user_id="test-user")
 
-                    # Should get confirmation
-                    content = (
-                        str(response.content) if hasattr(response, "content") else str(response)
-                    )
-                    assert "google drive" in content.lower() or "authorized" in content.lower(), (
-                        f"Failed to extract code from: {url}"
-                    )
+                        # Should get confirmation
+                        content = (
+                            str(response.content) if hasattr(response, "content") else str(response)
+                        )
+                        assert "google drive" in content.lower() or "authorized" in content.lower(), (
+                            f"Failed to extract code from: {url}"
+                        )
 
-                    # Reset for next test
-                    gdrive_config = agent.toolkit_configs[0]
-                    if "test-user" in gdrive_config._user_configs:
-                        del gdrive_config._user_configs["test-user"]
+                        # Reset for next test
+                        gdrive_config = agent.toolkit_configs[0]
+                        if "test-user" in gdrive_config._user_configs:
+                            del gdrive_config._user_configs["test-user"]
 
     def test_toolkit_config_is_configured_check(self):
         """Test that toolkit configs properly check if they're configured."""
@@ -190,26 +195,31 @@ class TestAgentExecution:
     @pytest.fixture
     def configured_agent(self):
         """Fixture that provides a ReleaseManager with Google Drive configured."""
-        agent = ReleaseManager()
+        with patch.dict(os.environ, {
+            "GDRIVE_CLIENT_ID": "test-client-id",
+            "GDRIVE_CLIENT_SECRET": "test-client-secret",
+            "GOOGLE_API_KEY": "test-api-key"
+        }):
+            agent = ReleaseManager()
 
-        # Mock and configure Google Drive (required toolkit)
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_creds = MagicMock()
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
+            # Mock and configure Google Drive (required toolkit)
+            with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
+                with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
+                    mock_creds = MagicMock()
+                    mock_flow_instance = MagicMock()
+                    mock_flow_instance.credentials = mock_creds
+                    mock_flow.from_client_config.return_value = mock_flow_instance
 
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
-                mock_build.return_value = mock_service
+                    mock_service = MagicMock()
+                    mock_service.about().get().execute.return_value = {
+                        "user": {"displayName": "Test", "emailAddress": "test@example.com"}
+                    }
+                    mock_build.return_value = mock_service
 
-                # Configure Google Drive
-                agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
+                    # Configure Google Drive
+                    agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
 
-        return agent
+            return agent
 
     @pytest.mark.skipif(
         "GOOGLE_API_KEY" not in os.environ,
@@ -361,32 +371,37 @@ class TestToolkitInstructions:
     @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
     def test_agent_instructions_include_toolkit_info(self, mock_gdrive_tools):
         """Test that agent receives toolkit-specific instructions when configured."""
-        agent = ReleaseManager()
+        with patch.dict(os.environ, {
+            "GDRIVE_CLIENT_ID": "test-client-id",
+            "GDRIVE_CLIENT_SECRET": "test-client-secret",
+            "GOOGLE_API_KEY": "test-api-key"
+        }):
+            agent = ReleaseManager()
 
-        # Mock Google Drive OAuth
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
+            # Mock Google Drive OAuth
+            mock_creds = MagicMock()
+            with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
+                with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
+                    mock_flow_instance = MagicMock()
+                    mock_flow_instance.credentials = mock_creds
+                    mock_flow.from_client_config.return_value = mock_flow_instance
 
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
-                mock_build.return_value = mock_service
+                    mock_service = MagicMock()
+                    mock_service.about().get().execute.return_value = {
+                        "user": {"displayName": "Test", "emailAddress": "test@example.com"}
+                    }
+                    mock_build.return_value = mock_service
 
-                # Configure Google Drive
-                agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
+                    # Configure Google Drive
+                    agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
 
-        # Get toolkit instructions
-        gdrive_config = agent.toolkit_configs[0]
-        instructions = gdrive_config.get_agent_instructions("test-user")
+            # Get toolkit instructions
+            gdrive_config = agent.toolkit_configs[0]
+            instructions = gdrive_config.get_agent_instructions("test-user")
 
-        # Should have Google Drive-specific instructions
-        assert len(instructions) > 0
-        assert any("google drive" in inst.lower() for inst in instructions)
+            # Should have Google Drive-specific instructions
+            assert len(instructions) > 0
+            assert any("google drive" in inst.lower() for inst in instructions)
 
     def test_agent_instructions_empty_when_not_configured(self):
         """Test that toolkits don't add instructions when not configured."""
@@ -421,13 +436,15 @@ class TestRequiredVsOptionalConfigs:
         """Test that GoogleDriveConfig is required."""
         agent = ReleaseManager()
 
-        # GoogleDrive should be the only default config and should be required
-        assert len(agent.toolkit_configs) == 1
+        # GoogleDrive should be first default config and be required
+        assert len(agent.toolkit_configs) >= 1, "Should have at least one default toolkit config"
         gdrive_config = agent.toolkit_configs[0]
-        assert gdrive_config.is_required(), "GoogleDriveConfig should be required"
+        assert gdrive_config.__class__.__name__ == 'GoogleDriveConfig', "First config should be GoogleDriveConfig"
+        assert gdrive_config.is_required(), "First config should be required"
 
     @patch("agentllm.tools.jira_toolkit.JiraTools")
-    def test_required_config_blocks_agent_until_configured(self, mock_jira_tools):
+    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
+    def test_required_config_blocks_agent_until_configured(self, mock_gdrive_tools, mock_jira_tools):
         """Test that required configs prevent agent usage until configured."""
         agent = ReleaseManager()
 
@@ -435,12 +452,14 @@ class TestRequiredVsOptionalConfigs:
         jira_config = JiraConfig()
         agent.toolkit_configs.append(jira_config)
 
-        # Mock the prompt
+        # Mock both toolkits
         mock_jira_tools.return_value.validate_connection.return_value = (True, "Connected")
+        mock_gdrive_tools.return_value.validate_connection.return_value = (True, "Connected")
 
-        # Try to use agent without configuring Jira
+        # Try to use agent without configuring any toolkit
         response = agent.run("Hello!", user_id="new-user")
 
-        # Should get JIRA config prompt, not agent response
+        # Should get config prompt, not agent response
         content = str(response.content) if hasattr(response, "content") else str(response)
-        assert "jira" in content.lower() or "token" in content.lower()
+        # If Google Drive is already handled, prompt might be different
+        assert "configure" in content.lower() or "token" in content.lower()

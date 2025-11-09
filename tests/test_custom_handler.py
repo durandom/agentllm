@@ -13,7 +13,8 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         response = handler.completion(
-            model="agno/release-manager", messages=[{"role": "user", "content": "Hello!"}],
+            model="agno/release-manager",
+            messages=[{"role": "user", "content": "Hello!"}],
         )
 
         assert response is not None

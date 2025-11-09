@@ -123,7 +123,7 @@ def hello(session):
                 {
                     "model": "agno/release-manager",
                     "messages": [{"role": "user", "content": "Hello from nox!"}],
-            }
+                }
             ),
         ],
         capture_output=True,
@@ -140,9 +140,7 @@ def hello(session):
         data = json.loads(result.stdout)
         if "error" in data:
             print(f"   ❌ Error: {data['error']}")
-            print(
-                "\n   💡 This is expected if agents don't have LLM API keys configured."
-            )
+            print("\n   💡 This is expected if agents don't have LLM API keys configured.")
             print("      To fix: Add API keys to .env and configure agents with models")
         elif "choices" in data:
             content = data["choices"][0]["message"]["content"]

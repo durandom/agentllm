@@ -1,18 +1,16 @@
 """OParl topic summary agent."""
 
-from typing import Optional
-
 from agno.agent import Agent
 from agno.models.anthropic import Claude
 from agno.tools.mcp_toolbox import MCPToolbox
 
 
 async def create_oparl_topic_summary(
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
     db=None,
     mcp_server_url: str = "https://oparl.bonn.machdenstaat.de/mcp",
-    mcp_toolsets: Optional[list[str]] = None,
+    mcp_toolsets: list[str] | None = None,
     **model_kwargs,
 ) -> Agent:
     """Create an OParl topic summary agent with MCP tools.

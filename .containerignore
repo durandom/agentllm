@@ -1,47 +1,115 @@
+# Git
+
+.git/
+.gitignore
+.github/
+.gitlab-ci.yml
+
 # Python
+
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.egg-info/
+dist/
+build/
 .venv/
 venv/
 env/
+ENV/
 
 # Testing
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 tests/
+test_*.py
+*_test.py
 *.log
-
-# Git
-.git/
-.gitignore
+agno_handler.log
 
 # IDE
+
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# Build
-build/
-dist/
-*.egg-info/
+# OS
+
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+
+.env
+.env.local
+.env.*.local
+.envrc
+*.pem
+*.key
+
+# Data and logs
+
+tmp/
+*.db
+*.db-journal
+*.log
+
+# Documentation
+
+docs/
+*.md
+!README.md
+
+# Docker/Container
+
+Dockerfile*
+Containerfile*
+docker-compose*.yml
+compose.yaml
+
+# OpenShift deployment files
+
+openshift/
+manifests/
 
 # Development
-.env
-.envrc
+
 noxfile.py
 .pre-commit-config.yaml
 Makefile
-compose.yaml
+
+# Node modules
+
+node_modules/
+
+# Jupyter
+
+*.ipynb
+.ipynb_checkpoints
+
+# Backup files
+
+*.bak
+*.backup
 
 # Misc
-tmp/
+
 cp/
 .claude/
 .mcp.json
 OPENWEBUI_CONFIG.md
 uv.lock
+.dmypy.json
+dmypy.json

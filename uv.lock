@@ -3,9 +3,9 @@ revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
-    "python_full_version == '3.13.*' and platform_python_implementation != 'PyPy'",
-    "python_full_version >= '3.13' and platform_python_implementation == 'PyPy'",
-    "python_full_version < '3.13'",
+    "python_full_version < '3.14' and platform_python_implementation != 'PyPy'",
+    "platform_python_implementation == 'PyPy'",
+    "python_version < '0'",
 ]
 
 [[package]]
@@ -25,9 +25,13 @@ dependencies = [
     { name = "nox" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "ruff" },
     { name = "sqlalchemy" },
     { name = "toolbox-core" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -44,10 +48,12 @@ requires-dist = [
     { name = "nox", specifier = ">=2025.10.16" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
-    { name = "ruff", specifier = ">=0.4.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "toolbox-core", specifier = ">=0.5.2" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.14.4" }]
 
 [[package]]
 name = "agno"

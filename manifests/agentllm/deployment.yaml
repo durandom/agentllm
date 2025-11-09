@@ -21,6 +21,8 @@ spec:
           env:
             - name: LITELLM_NUM_WORKER_THREADS
               value: "4"
+            - name: AGENTLLM_DATA_DIR
+              value: /logs
             - name: AGENTLLM_DB_PATH
               value: /db/agentllm.db
             - name: ANTHROPIC_API_KEY
@@ -41,6 +43,8 @@ spec:
           volumeMounts:
             - name: db-storage
               mountPath: /db
+            - name: logs-storage
+              mountPath: /logs
           livenessProbe:
             httpGet:
               path: /health/liveness
@@ -66,4 +70,6 @@ spec:
               cpu: "2000m"
       volumes:
         - name: db-storage
+          emptyDir: {}
+        - name: logs-storage
           emptyDir: {}

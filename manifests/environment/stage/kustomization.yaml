@@ -28,6 +28,10 @@ images:
     newName: codeberg.org/b4mad/agentllm/agentllm
     newTag: v0.1.0-8472087
 
+  - name: open-webui
+    newName: ghcr.io/open-webui/open-webui
+    newtag: main
+
 patches:
   - target:
       kind: Deployment

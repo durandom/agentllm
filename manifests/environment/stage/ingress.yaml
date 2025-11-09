@@ -5,7 +5,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt
     haproxy.router.openshift.io/timeout: 120s
     kubernetes.io/ingress.allow-http: "false"
-  name: openwebui
+  name: open-webui
 spec:
   ingressClassName: openshift-default
   rules:
@@ -16,7 +16,7 @@ spec:
             path: /
             backend:
               service:
-                name: openwebui
+                name: open-webui
                 port:
                   name: http
   tls:

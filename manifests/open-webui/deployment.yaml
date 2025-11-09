@@ -1,27 +1,17 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: openwebui
-  labels:
-    app: openwebui
+  name: open-webui
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: openwebui
   template:
-    metadata:
-      labels:
-        app: openwebui
     spec:
-      serviceAccount: openwebui
+      serviceAccount: open-webui
       containers:
-        - name: openwebui
-          image: ghcr.io/open-webui/open-webui:main
+        - name: open-webui
+          image: open-webui
           imagePullPolicy: IfNotPresent
           env:
-            - name: OLLAMA_BASE_URL
-              value: "http://ollama:11434"
             - name: ENABLE_OAUTH_SIGNUP
               value: "true"
             - name: OAUTH_CLIENT_ID
@@ -43,7 +33,10 @@ spec:
             - name: OPENAI_API_BASE_URLS
               value: http://agentllm:8890/v1
             - name: OPENAI_API_KEYS
-              value: sk-agno-test-key-12345
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: LITELLM_API_KEY
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -53,9 +46,9 @@ spec:
             limits:
               memory: 1Gi
           volumeMounts:
-            - name: openwebui-data
+            - name: open-webui-data
               mountPath: /app/backend/data
       volumes:
-        - name: openwebui-data
+        - name: open-webui-data
           persistentVolumeClaim:
-            claimName: openwebui-data
+            claimName: open-webui-data

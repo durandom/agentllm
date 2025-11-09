@@ -28,6 +28,16 @@ spec:
                 secretKeyRef:
                   name: agentllm
                   key: ANTHROPIC_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: OPENROUTER_API_KEY
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: LITELLM_API_KEY
           volumeMounts:
             - name: db-storage
               mountPath: /db
@@ -35,6 +45,9 @@ spec:
             httpGet:
               path: /health
               port: http
+              httpHeaders:
+                - name: Authorization
+                  value: "Bearer sk-agno-test-key-12345"
             initialDelaySeconds: 40
             periodSeconds: 30
             timeoutSeconds: 10
@@ -43,6 +56,9 @@ spec:
             httpGet:
               path: /health
               port: http
+              httpHeaders:
+                - name: Authorization
+                  value: "Bearer sk-agno-test-key-12345"
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5

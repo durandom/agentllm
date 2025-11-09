@@ -2,10 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 .PHONY: prepare-commit lint format typecheck test build help \
-        build-containers build-graphql-server build-oparl-mcp build-oparl-graphics \
-        tag-containers tag-graphql-server tag-oparl-mcp tag-oparl-graphics \
-        push-containers push-graphql-server push-oparl-mcp push-oparl-graphics \
-        clean-containers show-container-vars
+        build-containers tag-containers push-containers clean-containers show-container-vars
 
 .DEFAULT_GOAL := help
 
@@ -16,12 +13,14 @@ REGISTRY ?= codeberg.org/b4mad
 BUILD_DATE := $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+AGENTLLM_VERSION := $(shell grep '^version =' pyproject.toml | cut -d '"' -f2)
 
 # Container image names
 AGENTLLM_IMAGE := $(REGISTRY)/$(PROJECT_NAME)/agentllm
 
 # Container image tags (each component has its own version)
-AGENTLLM_TAG := $(GIT_COMMIT)
+AGENTLLM_VERSION_TAG := v$(AGENTLLM_VERSION)
+AGENTLLM_TAG := $(AGENTLLM_VERSION_TAG)-$(GIT_COMMIT)
 
 # Build arguments (version will be added per-component)
 BUILD_ARGS_BASE := --build-arg BUILD_DATE=$(BUILD_DATE) \
@@ -65,7 +64,7 @@ help:
 	@echo ""
 	@echo "Configuration Variables:"
 	@echo "  REGISTRY=$(REGISTRY)"
-	@echo "  AgentLLM Version: $(GRAPHQL_SERVER_VERSION)"
+	@echo "  AgentLLM Version: $(AGENTLLM_VERSION)"
 	@echo ""
 
 # ============================================================================
@@ -81,7 +80,7 @@ prepare-commit: format lint test
 
 test:
 	@echo "🧪 Running tests ..."
-	uv run pytest 
+	uv run pytest
 
 build:
 	@echo "🏗️  Building project..."
@@ -90,12 +89,12 @@ build:
 build-containers: build-agentllm
 	@echo "✅ All container images built"
 
-# Build GraphQL server image
+# Build AgentLLM image
 build-agentllm:
-	@echo "🏗️  Building GraphQL server image (v$(GRAPHQL_SERVER_VERSION))..."
+	@echo "🏗️  Building AgentLLM container image (v$(AGENTLLM_VERSION))..."
 	podman build $(PODMAN_BUILD_FLAGS) \
 		$(BUILD_ARGS_BASE) \
-		--build-arg VERSION=$(GRAPHQL_SERVER_VERSION) \
+		--build-arg VERSION=$(AGENTLLM_VERSION) \
 		--tag $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) \
 		--file Containerfile \
 		.
@@ -106,10 +105,11 @@ tag-containers: tag-agentllm
 	@echo "✅ All images tagged"
 
 tag-agentllm:
-	@echo "🏷️  Tagging GraphQL server image..."
-	podman tag $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION)
+	@echo "🏷️  Tagging AgentLLM image..."
+	podman tag $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) $(AGENTLLM_IMAGE):$(AGENTLLM_TAG)
+	podman tag $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION_TAG)
 	podman tag $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) $(AGENTLLM_IMAGE):latest
-	@echo "✅ Tagged: $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION) and :latest"
+	@echo "✅ Tagged: $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) :$(AGENTLLM_VERSION_TAG) and :latest"
 
 # Push all images to registry
 push-containers: push-agentllm
@@ -118,7 +118,7 @@ push-containers: push-agentllm
 push-agentllm:
 	@echo "📤 Pushing AgentLLM image..."
 	podman push $(AGENTLLM_IMAGE):$(AGENTLLM_TAG)
-	podman push $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION)
+	podman push $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION_TAG)
 	podman push $(AGENTLLM_IMAGE):latest
 	@echo "✅ Pushed AgentLLM image"
 
@@ -126,7 +126,7 @@ push-agentllm:
 clean-containers:
 	@echo "🧹 Cleaning up container images..."
 	-podman rmi $(AGENTLLM_IMAGE):$(AGENTLLM_TAG) 2>/dev/null || true
-	-podman rmi $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION) 2>/dev/null || true
+	-podman rmi $(AGENTLLM_IMAGE):$(AGENTLLM_VERSION_TAG) 2>/dev/null || true
 	-podman rmi $(AGENTLLM_IMAGE):latest 2>/dev/null || true
 	@echo "✅ Cleanup complete"
 
@@ -147,4 +147,4 @@ show-container-vars:
 	@echo "  AgentLLM:"
 	@echo "    Image: $(AGENTLLM_IMAGE)"
 	@echo "    Full Tag: $(AGENTLLM_TAG)"
-	@echo "    Version Tag: $(AGENTLLM_VERSION)"
+	@echo "    Version Tag: $(AGENTLLM_VERSION_TAG)"

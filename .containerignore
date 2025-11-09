@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Development
+.env
+.envrc
+noxfile.py
+.pre-commit-config.yaml
+Makefile
+compose.yaml
+
+# Misc
+tmp/
+cp/
+.claude/
+.mcp.json
+OPENWEBUI_CONFIG.md
+uv.lock

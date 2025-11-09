@@ -1,5 +1,6 @@
 """This is the agent registry."""
 
+import inspect
 from functools import partial
 from pathlib import Path
 from typing import Optional
@@ -12,7 +13,6 @@ from agentllm.agents.examples import (
     create_code_agent,
     create_echo_agent,
 )
-from agentllm.agents.examples import get_agent as _get_agent
 from agentllm.agents.oparl_lite import create_oparl_topic_summary
 
 DB_PATH = Path("tmp/agno_sessions.db")
@@ -30,7 +30,51 @@ AGENT_REGISTRY = {
 }
 
 
-def get_agent(
+async def _get_agent(
+    agent_name: str,
+    agent_registry: dict,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    db=None,
+    **model_kwargs,
+) -> Agent:
+    """Get an agent by name with optional model parameters.
+
+    Args:
+        agent_name: The name of the agent to retrieve
+        agent_registry: Registry mapping agent names to creator functions
+        temperature: Model temperature (0.0-2.0)
+        max_tokens: Maximum tokens in response
+        db: Database instance for session management
+        **model_kwargs: Additional model parameters
+
+    Returns:
+        Agent instance
+
+    Raises:
+        KeyError: If the agent name is not found
+    """
+    if agent_name not in agent_registry:
+        raise KeyError(
+            f"Agent '{agent_name}' not found. Available agents: {', '.join(agent_registry.keys())}"
+        )
+
+    creator_func = agent_registry[agent_name]
+
+    # Check if the creator function is async and call accordingly
+    if inspect.iscoroutinefunction(
+        creator_func.func if isinstance(creator_func, partial) else creator_func
+    ):
+        return await creator_func(
+            temperature=temperature, max_tokens=max_tokens, db=db, **model_kwargs
+        )
+    else:
+        return creator_func(
+            temperature=temperature, max_tokens=max_tokens, db=db, **model_kwargs
+        )
+
+
+async def get_agent(
     agent_name: str,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
@@ -50,7 +94,7 @@ def get_agent(
     Raises:
         KeyError: If the agent name is not found
     """
-    return _get_agent(
+    return await _get_agent(
         agent_name=agent_name,
         agent_registry=AGENT_REGISTRY,
         temperature=temperature,

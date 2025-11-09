@@ -1,5 +1,6 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
+import asyncio
 import logging
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
@@ -7,7 +8,7 @@ import litellm
 from litellm.llms.custom_llm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 
-from agentllm.agents.examples import get_agent
+from agentllm.agents import get_agent
 
 # Configure logging for our custom handler
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class AgnoCustomLLM(CustomLLM):
 
         return session_id, user_id
 
-    def _get_agent(self, model: str, user_id: Optional[str] = None, **kwargs):
+    async def _get_agent(self, model: str, user_id: Optional[str] = None, **kwargs):
         """Get agent instance from model name with parameters.
 
         Uses caching to reuse agent instances for the same configuration and user.
@@ -166,7 +167,7 @@ class AgnoCustomLLM(CustomLLM):
         # Create new agent and cache it
         logger.info(f"Creating new agent for key: {cache_key}")
         try:
-            agent = get_agent(
+            agent = await get_agent(
                 agent_name, temperature=temperature, max_tokens=max_tokens
             )
             self._agent_cache[cache_key] = agent
@@ -257,7 +258,16 @@ class AgnoCustomLLM(CustomLLM):
         )
 
         # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        # Use asyncio.run() to handle async agent creation in sync context
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're already in an async context, create a task
+            agent = loop.run_until_complete(
+                self._get_agent(model, user_id=user_id, **kwargs)
+            )
+        except RuntimeError:
+            # No event loop running, create one
+            agent = asyncio.run(self._get_agent(model, user_id=user_id, **kwargs))
 
         # Run the agent with session management
         response = agent.run(
@@ -356,7 +366,7 @@ class AgnoCustomLLM(CustomLLM):
         )
 
         # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        agent = await self._get_agent(model, user_id=user_id, **kwargs)
 
         # Run the agent asynchronously with session management
         response = await agent.arun(
@@ -397,7 +407,7 @@ class AgnoCustomLLM(CustomLLM):
         )
 
         # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        agent = await self._get_agent(model, user_id=user_id, **kwargs)
 
         # Use Agno's real async streaming with session management
         chunk_count = 0

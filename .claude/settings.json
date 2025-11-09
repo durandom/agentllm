@@ -1,0 +1,28 @@
+{
+    "permissions": {
+        "allow": [
+            "Bash(git status)",
+            "Bash(git diff *)",
+            "Bash(git log *)",
+            "Bash(git add *)",
+            "Bash(git add .)",
+            "Bash(git commit *)",
+            "Bash(git push)",
+            "Bash(git config *)",
+            "Bash(which *)",
+            "Bash(pwd)",
+            "Bash(ls *)",
+            "Bash(make)"
+        ],
+        "deny": [
+            "Bash(rm -rf /)",
+            "Bash(curl * | bash)",
+            "Bash(wget * | sh)",
+            "Bash(eval *)"
+        ]
+    },
+    "includeCoAuthoredBy": false,
+    "enabledMcpjsonServers": [
+        "context7"
+    ]
+}

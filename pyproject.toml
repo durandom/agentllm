@@ -1,36 +1,41 @@
 [project]
-name = "agentllm"
-version = "0.1.0"
+dependencies = [
+  "agno>=2.2.8",
+  "anthropic>=0.72.0",
+  "litellm[proxy]>=1.79.1",
+  "nox>=2025.10.16",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "sqlalchemy>=2.0.0",
+  "toolbox-core>=0.5.2",
+]
 description = "Custom LiteLLM provider for Agno agents - OpenAI-compatible API for Agno"
+name = "agentllm"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "agno>=2.2.8",
-    "litellm[proxy]>=1.79.1",
-    "nox>=2025.10.16",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.2.0",
-    "sqlalchemy>=2.0.0",
-]
+version = "0.1.0"
 
 [build-system]
-requires = ["hatchling"]
 build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentllm"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
-]
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+python_classes = ["Test*"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
 ignore = []
+select = ["E", "F", "I", "N", "W"]

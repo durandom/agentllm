@@ -1,12 +1,27 @@
 services:
+  agentllm:
+    image: localhost/agentllm:latest
+    container_name: agentllm
+    ports:
+      - "8890:8890"
+    environment:
+      LITELLM_NUM_WORKER_THREADS: "4"
+      ANTHROPY_API_KEY: "sk-ant-api03-..."
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8890/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     ports:
       - "3000:8080"
     environment:
-      # Point to the LiteLLM proxy running on host
-      OPENAI_API_BASE_URLS: "http://host.docker.internal:8890/v1"
+      # Point to the LiteLLM proxy running in agentllm container
+      OPENAI_API_BASE_URLS: "http://agentllm:8890/v1"
       OPENAI_API_KEYS: "sk-agno-test-key-12345"
 
       # Optional: Disable other providers
@@ -21,8 +36,9 @@ services:
 
     volumes:
       - open-webui:/app/backend/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      agentllm:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

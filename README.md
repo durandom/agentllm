@@ -15,8 +15,12 @@ This project implements a LiteLLM custom provider for Agno agents, allowing you 
 
 ## Architecture
 
-```
-[Client] -> [LiteLLM Proxy :8890] -> [Agno Provider] -> [Agno Agent] -> [LLM APIs]
+```mermaid
+flowchart LR;
+    Client-->LiteLLM_Proxy;
+    LiteLLM_Proxy-->Agno_Provider;
+    Agno_Provider-->Agno_Agent;
+    Agno_Agent-->LLM_APIs;
 ```
 
 ## Prerequisites

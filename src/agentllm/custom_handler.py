@@ -1,5 +1,6 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
+import json
 import os
 import sys
 from collections.abc import AsyncIterator, Iterator
@@ -7,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import litellm
-from agno.agent import RunContentEvent
+from agno.agent import (
+    ReasoningStepEvent,
+    RunContentEvent,
+    ToolCallCompletedEvent,
+    ToolCallStartedEvent,
+)
 from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 from loguru import logger
@@ -313,7 +319,8 @@ class AgnoCustomLLM(CustomLLM):
 
         Note: Streaming is not fully supported in sync mode.
         Returns a single complete response instead of chunks.
-        For true streaming, use async requests which will call astreaming().
+        For true streaming with tool call visibility and reasoning events,
+        use async requests which will call astreaming().
 
         Args:
             model: Model name
@@ -456,15 +463,14 @@ class AgnoCustomLLM(CustomLLM):
         stream = agent.arun(user_message, stream=True, session_id=session_id, user_id=user_id)
         logger.debug(f"agent.arun() returned stream type: {type(stream)}")
 
-        logger.info("Entering async for loop over ReleaseManager stream...")
+        logger.info("Entering async for loop over agent stream...")
         async for chunk in stream:
             chunk_count += 1
             chunk_type = type(chunk).__name__
 
-            logger.debug(f"[custom_handler] Received event #{chunk_count} from ReleaseManager: type={chunk_type}")
+            logger.debug(f"[custom_handler] Received event #{chunk_count} from agent: type={chunk_type}")
 
-            # Filter: Only process RunContentEvent (actual content chunks)
-            # RunCompletedEvent and other control events are filtered in ReleaseManager
+            # Process different event types
             if isinstance(chunk, RunContentEvent):
                 # Extract content from chunk
                 content = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -473,7 +479,8 @@ class AgnoCustomLLM(CustomLLM):
                     logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
                     continue
 
-                logger.debug(f"Yielding chunk #{chunk_count} to LiteLLM, content_length={len(content)}")
+                logger.debug(f"Yielding RunContentEvent #{chunk_count} to LiteLLM, content_length={len(content)}")
+
                 # Yield GenericStreamingChunk format
                 yield {
                     "text": content,
@@ -487,10 +494,102 @@ class AgnoCustomLLM(CustomLLM):
                         "total_tokens": 0,
                     },
                 }
-                logger.debug(f"Chunk #{chunk_count} yielded to LiteLLM successfully")
+                logger.debug(f"RunContentEvent #{chunk_count} yielded to LiteLLM successfully")
+
+            elif isinstance(chunk, ToolCallStartedEvent):
+                # Tool call is starting - send formatted text (similar to Gemini reasoning format)
+                if hasattr(chunk, "tool") and chunk.tool:
+                    tool = chunk.tool
+                    tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
+                    tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
+
+                    logger.info(f"🔧 ToolCallStartedEvent #{chunk_count}: {tool_name}({json.dumps(tool_args)})")
+
+                    # Format tool call as visible text (similar to Gemini's reasoning blocks)
+                    args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
+                    tool_call_text = f'\n<details type="tool_call" open="true">\n<summary>🔧 Tool: {tool_name}</summary>\n\n```json\n{args_json}\n```\n\n'
+
+                    yield {
+                        "text": tool_call_text,
+                        "finish_reason": None,
+                        "index": 0,
+                        "is_finished": False,
+                        "tool_use": None,
+                        "usage": {
+                            "completion_tokens": 0,
+                            "prompt_tokens": 0,
+                            "total_tokens": 0,
+                        },
+                    }
+                    logger.debug(f"ToolCallStartedEvent #{chunk_count} yielded to LiteLLM")
+                else:
+                    logger.warning(f"ToolCallStartedEvent #{chunk_count} has no tool attribute, skipping")
+
+            elif isinstance(chunk, ToolCallCompletedEvent):
+                # Tool call completed - show result and close the details block
+                if hasattr(chunk, "tool") and chunk.tool:
+                    tool = chunk.tool
+                    tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
+                    tool_result = tool.result if hasattr(tool, "result") else "No result"
+
+                    logger.info(f"✅ ToolCallCompletedEvent #{chunk_count}: {tool_name} → {str(tool_result)[:100]}")
+
+                    # Include the tool result in the details block
+                    completion_text = f"**Result:**\n\n{tool_result}\n\n✅ Completed\n</details>\n\n"
+
+                    yield {
+                        "text": completion_text,
+                        "finish_reason": None,
+                        "index": 0,
+                        "is_finished": False,
+                        "tool_use": None,
+                        "usage": {
+                            "completion_tokens": 0,
+                            "prompt_tokens": 0,
+                            "total_tokens": 0,
+                        },
+                    }
+                    logger.debug(f"ToolCallCompletedEvent #{chunk_count} yielded to LiteLLM")
+                else:
+                    logger.warning(f"ToolCallCompletedEvent #{chunk_count} has no tool attribute, skipping")
+
+            elif isinstance(chunk, ReasoningStepEvent):
+                # Reasoning step - format similar to Gemini's reasoning blocks
+                reasoning_text = (
+                    chunk.reasoning_content
+                    if hasattr(chunk, "reasoning_content")
+                    else str(chunk.content)
+                    if hasattr(chunk, "content")
+                    else ""
+                )
+
+                if reasoning_text:
+                    logger.info(f"💭 ReasoningStepEvent #{chunk_count}: {reasoning_text[:100]}")
+
+                    # Format as collapsible details block (similar to Gemini)
+                    reasoning_block = (
+                        f'\n<details type="reasoning">\n<summary>💭 Reasoning Step</summary>\n\n{reasoning_text}\n\n</details>\n\n'
+                    )
+
+                    yield {
+                        "text": reasoning_block,
+                        "finish_reason": None,
+                        "index": 0,
+                        "is_finished": False,
+                        "tool_use": None,
+                        "usage": {
+                            "completion_tokens": 0,
+                            "prompt_tokens": 0,
+                            "total_tokens": 0,
+                        },
+                    }
+                    logger.debug(f"ReasoningStepEvent #{chunk_count} yielded to LiteLLM")
+                else:
+                    logger.debug(f"ReasoningStepEvent #{chunk_count} has no content, skipping")
+
             else:
-                # Log non-content events for debugging (these shouldn't reach here if ReleaseManager filters correctly)
-                logger.debug(f"Received non-content event: {chunk_type} (not yielding to LiteLLM)")
+                # Log other events for debugging (e.g., RunStartedEvent, etc.)
+                logger.debug(f"Received event: {chunk_type} (not yielding to LiteLLM)")
 
         logger.info(f"async for loop over ReleaseManager stream completed, total chunks: {chunk_count}")
         logger.info("Sending final chunk with finish_reason=stop")

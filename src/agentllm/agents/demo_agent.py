@@ -258,6 +258,7 @@ class DemoAgent:
             add_history_to_context=True,
             num_history_runs=10,  # Include last 10 messages
             read_chat_history=True,  # Allow agent to read full history
+            reasoning=True,  # Enable reasoning capabilities
         )
 
         logger.info("✅ Agno Agent instance created successfully")

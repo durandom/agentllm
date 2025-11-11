@@ -235,6 +235,30 @@ class BaseAgentWrapper(ABC):
         logger.debug("Created SimpleResponse object")
         return response
 
+    def _format_reasoning_content(self, content: str) -> str:
+        """
+        Format reasoning content with markdown block quotes for Open WebUI.
+
+        This converts plain thinking text into markdown-quoted format:
+        - Each line is prefixed with '> '
+        - Preserves blank lines as '>'
+        - Maintains original formatting and structure
+
+        Args:
+            content: Raw reasoning/thinking content from Gemini
+
+        Returns:
+            Formatted string with markdown block quotes
+        """
+        lines = content.split("\n")
+        formatted = []
+        for line in lines:
+            if line.strip():
+                formatted.append(f"> {line}")
+            else:
+                formatted.append(">")
+        return "\n".join(formatted)
+
     def _handle_configuration(self, message: str, user_id: str | None) -> Any | None:
         """
         Handle toolkit configuration from user messages.
@@ -749,6 +773,12 @@ class BaseAgentWrapper(ABC):
 
             logger.info("Entering async for loop over agent stream...")
 
+            # Track reasoning state for Option 2 implementation
+            # (complete reasoning block sent after thinking completes)
+            reasoning_start_time = None
+            reasoning_content_parts = []
+            reasoning_block_sent = False
+
             # Iterate over Agno stream events and convert to GenericStreamingChunk format
             try:
                 async for chunk in stream:
@@ -760,16 +790,73 @@ class BaseAgentWrapper(ABC):
                     # Process different Agno event types and convert to LiteLLM format
 
                     if isinstance(chunk, RunContentEvent):
-                        # Extract content from chunk
+                        # Check for Gemini native thinking content (Option 2 implementation)
+                        if hasattr(chunk, "reasoning_content") and chunk.reasoning_content:
+                            # Start timing reasoning if this is the first reasoning content
+                            if reasoning_start_time is None:
+                                import time
+
+                                reasoning_start_time = time.time()
+                                logger.info("💭 Reasoning started - accumulating thinking content")
+
+                            # Accumulate reasoning content
+                            reasoning_content_parts.append(chunk.reasoning_content)
+                            logger.debug(
+                                f"Accumulated reasoning content part #{len(reasoning_content_parts)}, length={len(chunk.reasoning_content)}"
+                            )
+
+                            # Don't yield yet - we're accumulating for complete block
+                            continue
+
+                        # Extract regular content from chunk
                         content = chunk.content if hasattr(chunk, "content") else str(chunk)
 
                         if not content:
                             logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
                             continue
 
+                        # If we have accumulated reasoning and haven't sent the block yet, send it now
+                        # This happens when we transition from reasoning to regular content
+                        if reasoning_content_parts and not reasoning_block_sent:
+                            import time
+
+                            reasoning_duration = int(time.time() - reasoning_start_time) if reasoning_start_time else 0
+                            full_reasoning_content = "".join(reasoning_content_parts)
+
+                            logger.info(
+                                f"💭 Reasoning completed - duration={reasoning_duration}s, content_length={len(full_reasoning_content)}"
+                            )
+
+                            # Format reasoning content with markdown block quotes
+                            formatted_reasoning = self._format_reasoning_content(full_reasoning_content)
+
+                            # Create Open WebUI compatible reasoning block
+                            reasoning_block = (
+                                f'<details type="reasoning" done="true" duration="{reasoning_duration}">\n'
+                                f"<summary>Thought for {reasoning_duration} seconds</summary>\n\n"
+                                f"{formatted_reasoning}\n\n"
+                                f"</details>\n\n"
+                            )
+
+                            # Yield complete reasoning block
+                            yield {
+                                "text": reasoning_block,
+                                "finish_reason": None,
+                                "index": 0,
+                                "is_finished": False,
+                                "tool_use": None,
+                                "usage": {
+                                    "completion_tokens": 0,
+                                    "prompt_tokens": 0,
+                                    "total_tokens": 0,
+                                },
+                            }
+
+                            reasoning_block_sent = True
+
+                        # Now yield regular content
                         logger.debug(f"Yielding RunContentEvent #{chunk_count}, content_length={len(content)}")
 
-                        # Yield GenericStreamingChunk format
                         yield {
                             "text": content,
                             "finish_reason": None,

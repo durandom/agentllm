@@ -180,21 +180,45 @@ class DemoAgent(BaseAgentWrapper):
             "- Make it fun and educational!",
         ]
 
-    def _get_agent_kwargs(self) -> dict:
+    def _build_model_params(self) -> dict:
         """
-        Override to add reasoning capability to Demo Agent.
+        Override to configure Gemini with native thinking capability.
 
-        This extends the base defaults by calling super() and adding
-        reasoning=True. This is the standard pattern for customizing
-        Agent constructor parameters.
+        This extends the base model params by adding:
+        - thinking_budget: Allocate tokens for thinking
+        - include_thoughts: Request thought summaries in response
+
+        These params get passed to Gemini(**model_params) in base agent.
 
         Returns:
-            Dictionary with base defaults + reasoning=True
+            Dictionary with base model params + thinking configuration
+        """
+        # Get base model params (id, temperature, max_output_tokens)
+        model_params = super()._build_model_params()
+
+        # Add Gemini native thinking parameters
+        model_params["thinking_budget"] = 200  # Allocate up to 200 tokens for thinking
+        model_params["include_thoughts"] = True  # Request thought summaries in response
+
+        return model_params
+
+    def _get_agent_kwargs(self) -> dict:
+        """
+        Get agent kwargs without Agno's reasoning agent.
+
+        We rely on Gemini's native thinking (configured in _build_model_params)
+        instead of Agno's ReasoningAgent pattern. Gemini will include thinking
+        directly in the response content formatted as <details> blocks.
+
+        Returns:
+            Dictionary with base defaults (NO reasoning=True)
         """
         # Get base defaults (db, add_history_to_context, etc.)
         kwargs = super()._get_agent_kwargs()
 
-        # Add demo agent-specific parameters
-        kwargs["reasoning"] = True  # Enable step-by-step reasoning
+        # DO NOT set reasoning=True here!
+        # When reasoning=True, Agno uses its ReasoningAgent which suppresses
+        # Gemini's native thinking. We want Gemini's thinking to appear directly
+        # in the response content as formatted <details> blocks.
 
         return kwargs

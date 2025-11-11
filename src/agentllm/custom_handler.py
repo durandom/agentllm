@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import litellm
+from agno.agent import RunContentEvent
 from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 from loguru import logger
@@ -195,9 +196,16 @@ class AgnoCustomLLM(CustomLLM):
         Returns:
             ModelResponse object
         """
-        logger.debug(f"_build_response() called for model={model}, content_length={len(content)}")
+        logger.info(f"_build_response() called for model={model}, content_length={len(content)}")
+        logger.debug(f"Content being added to response: {content[:500]}")  # First 500 chars
+
         message = Message(role="assistant", content=content)
+        logger.debug(
+            f"Created Message object: role={message.role}, content_length={len(message.content) if message.content else 0}"
+        )
+
         choice = Choices(finish_reason="stop", index=0, message=message)
+        logger.debug(f"Created Choices object with finish_reason={choice.finish_reason}")
 
         model_response = ModelResponse()
         model_response.model = model
@@ -208,7 +216,12 @@ class AgnoCustomLLM(CustomLLM):
             "total_tokens": 0,
         }
 
-        logger.debug("_build_response() completed successfully")
+        logger.info(
+            f"ModelResponse built: model={model_response.model}, choices_count={len(model_response.choices)}"
+        )
+        logger.debug(
+            f"Response first choice content: {model_response.choices[0].message.content[:200] if model_response.choices[0].message.content else 'None'}"
+        )
         return model_response
 
     def _extract_request_params(
@@ -286,7 +299,13 @@ class AgnoCustomLLM(CustomLLM):
 
         # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-        logger.info(f"Extracted content length: {len(content)}")
+        logger.info(f"Extracted content length: {len(content) if content else 0}")
+        logger.info(f"Content type: {type(content)}")
+        logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
+        logger.debug(f"Full content value: {content}")
+        logger.debug(
+            f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}"
+        )
 
         result = self._build_response(model, str(content))
         logger.info(f"<<< completion() FINISHED - model={model}")
@@ -403,7 +422,13 @@ class AgnoCustomLLM(CustomLLM):
 
         # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-        logger.info(f"Extracted content length: {len(content)}")
+        logger.info(f"Extracted content length: {len(content) if content else 0}")
+        logger.info(f"Content type: {type(content)}")
+        logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
+        logger.debug(f"Full content value: {content}")
+        logger.debug(
+            f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}"
+        )
 
         result = self._build_response(model, str(content))
         logger.info(f"<<< acompletion() FINISHED - model={model}")
@@ -459,34 +484,40 @@ class AgnoCustomLLM(CustomLLM):
             chunk_count += 1
             chunk_type = type(chunk).__name__
 
-            # Extract content from chunk
-            content = chunk.content if hasattr(chunk, "content") else str(chunk)
-
             logger.debug(
-                f"[custom_handler] Received chunk #{chunk_count} from ReleaseManager: "
-                f"type={chunk_type}, content_length={len(content)}, "
-                f"has_content={bool(content)}"
+                f"[custom_handler] Received event #{chunk_count} from ReleaseManager: type={chunk_type}"
             )
 
-            if not content:
-                logger.debug(f"Skipping empty chunk #{chunk_count}")
-                continue
+            # Filter: Only process RunContentEvent (actual content chunks)
+            # RunCompletedEvent and other control events are filtered in ReleaseManager
+            if isinstance(chunk, RunContentEvent):
+                # Extract content from chunk
+                content = chunk.content if hasattr(chunk, "content") else str(chunk)
 
-            logger.debug(f"Yielding chunk #{chunk_count} to LiteLLM, content_length={len(content)}")
-            # Yield GenericStreamingChunk format
-            yield {
-                "text": content,
-                "finish_reason": None,
-                "index": 0,
-                "is_finished": False,
-                "tool_use": None,
-                "usage": {
-                    "completion_tokens": 0,
-                    "prompt_tokens": 0,
-                    "total_tokens": 0,
-                },
-            }
-            logger.debug(f"Chunk #{chunk_count} yielded to LiteLLM successfully")
+                if not content:
+                    logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
+                    continue
+
+                logger.debug(
+                    f"Yielding chunk #{chunk_count} to LiteLLM, content_length={len(content)}"
+                )
+                # Yield GenericStreamingChunk format
+                yield {
+                    "text": content,
+                    "finish_reason": None,
+                    "index": 0,
+                    "is_finished": False,
+                    "tool_use": None,
+                    "usage": {
+                        "completion_tokens": 0,
+                        "prompt_tokens": 0,
+                        "total_tokens": 0,
+                    },
+                }
+                logger.debug(f"Chunk #{chunk_count} yielded to LiteLLM successfully")
+            else:
+                # Log non-content events for debugging (these shouldn't reach here if ReleaseManager filters correctly)
+                logger.debug(f"Received non-content event: {chunk_type} (not yielding to LiteLLM)")
 
         logger.info(
             f"async for loop over ReleaseManager stream completed, total chunks: {chunk_count}"

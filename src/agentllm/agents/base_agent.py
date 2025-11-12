@@ -220,9 +220,7 @@ class BaseAgentWrapper(ABC):
         Returns:
             Response object with content attribute
         """
-        logger.debug(
-            f"_create_simple_response() called with content length: {len(content)}"
-        )
+        logger.debug(f"_create_simple_response() called with content length: {len(content)}")
 
         class SimpleResponse:
             def __init__(self, content: str):
@@ -328,17 +326,13 @@ class BaseAgentWrapper(ABC):
         for config in self.toolkit_configs:
             if config.is_required() and not config.is_configured(user_id):
                 config_name = config.__class__.__name__
-                logger.info(
-                    f"⚠ Required toolkit {config_name} is NOT configured for user {user_id}"
-                )
+                logger.info(f"⚠ Required toolkit {config_name} is NOT configured for user {user_id}")
 
                 prompt = config.get_config_prompt(user_id)
                 if prompt:
                     logger.info(f"Returning configuration prompt for {config_name}")
                     logger.debug(f"Prompt: {prompt[:100]}...")
-                    logger.info(
-                        "<<< _handle_configuration() FINISHED (required config prompt)"
-                    )
+                    logger.info("<<< _handle_configuration() FINISHED (required config prompt)")
                     logger.debug("=" * 80)
                     return self._create_simple_response(prompt)
 
@@ -353,13 +347,9 @@ class BaseAgentWrapper(ABC):
 
                 auth_prompt = config.check_authorization_request(message, user_id)
                 if auth_prompt:
-                    logger.info(
-                        f"Optional toolkit {config_name} detected authorization request"
-                    )
+                    logger.info(f"Optional toolkit {config_name} detected authorization request")
                     logger.debug(f"Auth prompt: {auth_prompt[:100]}...")
-                    logger.info(
-                        "<<< _handle_configuration() FINISHED (optional config prompt)"
-                    )
+                    logger.info("<<< _handle_configuration() FINISHED (optional config prompt)")
                     logger.debug("=" * 80)
                     return self._create_simple_response(auth_prompt)
 
@@ -425,9 +415,7 @@ class BaseAgentWrapper(ABC):
             toolkit = config.get_toolkit(user_id)
             if toolkit:
                 tools.append(toolkit)
-                logger.info(
-                    f"  ✓ Adding {config.__class__.__name__} toolkit to agent for user {user_id}"
-                )
+                logger.info(f"  ✓ Adding {config.__class__.__name__} toolkit to agent for user {user_id}")
 
         logger.debug(f"Total tools collected: {len(tools)}")
         return tools
@@ -456,9 +444,7 @@ class BaseAgentWrapper(ABC):
         for config in self.toolkit_configs:
             toolkit_instructions = config.get_agent_instructions(user_id)
             if toolkit_instructions:
-                logger.debug(
-                    f"  + {config.__class__.__name__} added {len(toolkit_instructions)} instruction lines"
-                )
+                logger.debug(f"  + {config.__class__.__name__} added {len(toolkit_instructions)} instruction lines")
                 instructions.extend(toolkit_instructions)
 
         logger.debug(f"Total instruction lines: {len(instructions)}")
@@ -478,15 +464,11 @@ class BaseAgentWrapper(ABC):
 
         # Get all agent kwargs (includes base defaults + subclass customizations)
         agent_kwargs = self._get_agent_kwargs()
-        logger.debug(
-            f"Agent kwargs from _get_agent_kwargs(): {list(agent_kwargs.keys())}"
-        )
+        logger.debug(f"Agent kwargs from _get_agent_kwargs(): {list(agent_kwargs.keys())}")
 
         # Add session_id and user_id if using constructor defaults (Use Case 1)
         if self._use_constructor_session_ids():
-            logger.debug(
-                "Using constructor session IDs (Use Case 1 - wrapper is per-user+session)"
-            )
+            logger.debug("Using constructor session IDs (Use Case 1 - wrapper is per-user+session)")
             if self._session_id:
                 agent_kwargs["session_id"] = self._session_id
                 logger.debug(f"  + session_id: {self._session_id}")
@@ -494,9 +476,7 @@ class BaseAgentWrapper(ABC):
                 agent_kwargs["user_id"] = self._user_id
                 logger.debug(f"  + user_id: {self._user_id}")
         else:
-            logger.debug(
-                "NOT using constructor session IDs (Use Case 2 - pass on each run() call)"
-            )
+            logger.debug("NOT using constructor session IDs (Use Case 2 - pass on each run() call)")
 
         logger.debug(f"Final agent kwargs: {list(agent_kwargs.keys())}")
         return agent_kwargs
@@ -586,9 +566,7 @@ class BaseAgentWrapper(ABC):
         agent_kwargs = self._build_agent_constructor_kwargs()
 
         # Create agent instance
-        agent = self._create_agent_instance(
-            model_params, tools, instructions, agent_kwargs
-        )
+        agent = self._create_agent_instance(model_params, tools, instructions, agent_kwargs)
 
         # Store the agent for reuse
         self._agent = agent
@@ -626,9 +604,7 @@ class BaseAgentWrapper(ABC):
         # If config_response is not None, user needs to configure
         if config_response is not None:
             logger.info("Configuration handling returned response, returning to user")
-            logger.info(
-                f"<<< {self.__class__.__name__}.run() FINISHED (config response)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}.run() FINISHED (config response)")
             logger.info("=" * 80)
             return config_response
 
@@ -661,9 +637,7 @@ class BaseAgentWrapper(ABC):
             logger.info("=" * 80)
             return self._create_simple_response(error_msg)
 
-    async def _arun_non_streaming(
-        self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs
-    ):
+    async def _arun_non_streaming(self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs):
         """Internal async method for non-streaming mode."""
         logger.info("=" * 80)
         logger.info(f">>> {self.__class__.__name__}._arun_non_streaming() STARTED - user_id={user_id}, session_id={session_id}")
@@ -675,18 +649,14 @@ class BaseAgentWrapper(ABC):
 
         if config_response is not None:
             logger.info("Configuration handling returned response, returning to user")
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (config response)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (config response)")
             logger.info("=" * 80)
             return config_response
 
         if not user_id:
             error_msg = "❌ User ID is required to create an agent."
             logger.error("Cannot create agent: user_id is None")
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (error)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (error)")
             logger.info("=" * 80)
             return self._create_simple_response(error_msg)
 
@@ -698,26 +668,20 @@ class BaseAgentWrapper(ABC):
             effective_session_id = session_id if session_id is not None else self._session_id
 
             logger.info(f"Running agent.arun() for user {user_id}, session {effective_session_id} (non-streaming)...")
-            result = await agent.arun(message, user_id=user_id, session_id=effective_session_id, **kwargs)
+            result = await agent.arun(message, user_id=user_id, session_id=effective_session_id, stream=False, **kwargs)
             logger.info(f"✅ Agent.arun() completed, result type: {type(result)}")
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (success)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (success)")
             logger.info("=" * 80)
             return result
         except Exception as e:
             # Agent creation or execution failed
             error_msg = f"❌ Error: {str(e)}"
             logger.error(f"Failed to run agent for user {user_id}: {e}", exc_info=True)
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (exception)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (exception)")
             logger.info("=" * 80)
             return self._create_simple_response(error_msg)
 
-    async def _arun_streaming(
-        self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def _arun_streaming(self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs) -> AsyncIterator[dict[str, Any]]:
         """
         Internal async generator for streaming mode.
 
@@ -766,9 +730,7 @@ class BaseAgentWrapper(ABC):
                 },
             }
 
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (config response)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (config response)")
             logger.info("=" * 80)
             return
 
@@ -804,9 +766,7 @@ class BaseAgentWrapper(ABC):
                 },
             }
 
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (error)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (error)")
             logger.info("=" * 80)
             return
 
@@ -845,26 +805,19 @@ class BaseAgentWrapper(ABC):
                     chunk_count += 1
                     chunk_type = type(chunk).__name__
 
-                    logger.debug(
-                        f"[base_agent] Received event #{chunk_count} from agent: type={chunk_type}"
-                    )
+                    logger.debug(f"[base_agent] Received event #{chunk_count} from agent: type={chunk_type}")
 
                     # Process different Agno event types and convert to LiteLLM format
 
                     if isinstance(chunk, RunContentEvent):
                         # Check for Gemini native thinking content (Option 2 implementation)
-                        if (
-                            hasattr(chunk, "reasoning_content")
-                            and chunk.reasoning_content
-                        ):
+                        if hasattr(chunk, "reasoning_content") and chunk.reasoning_content:
                             # Start timing reasoning if this is the first reasoning content
                             if reasoning_start_time is None:
                                 import time
 
                                 reasoning_start_time = time.time()
-                                logger.info(
-                                    "💭 Reasoning started - accumulating thinking content"
-                                )
+                                logger.info("💭 Reasoning started - accumulating thinking content")
 
                             # Accumulate reasoning content
                             reasoning_content_parts.append(chunk.reasoning_content)
@@ -876,14 +829,10 @@ class BaseAgentWrapper(ABC):
                             continue
 
                         # Extract regular content from chunk
-                        content = (
-                            chunk.content if hasattr(chunk, "content") else str(chunk)
-                        )
+                        content = chunk.content if hasattr(chunk, "content") else str(chunk)
 
                         if not content:
-                            logger.debug(
-                                f"Skipping empty RunContentEvent #{chunk_count}"
-                            )
+                            logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
                             continue
 
                         # If we have accumulated reasoning and haven't sent the block yet, send it now
@@ -891,11 +840,7 @@ class BaseAgentWrapper(ABC):
                         if reasoning_content_parts and not reasoning_block_sent:
                             import time
 
-                            reasoning_duration = (
-                                int(time.time() - reasoning_start_time)
-                                if reasoning_start_time
-                                else 0
-                            )
+                            reasoning_duration = int(time.time() - reasoning_start_time) if reasoning_start_time else 0
                             full_reasoning_content = "".join(reasoning_content_parts)
 
                             logger.info(
@@ -903,9 +848,7 @@ class BaseAgentWrapper(ABC):
                             )
 
                             # Format reasoning content with markdown block quotes
-                            formatted_reasoning = self._format_reasoning_content(
-                                full_reasoning_content
-                            )
+                            formatted_reasoning = self._format_reasoning_content(full_reasoning_content)
 
                             # Create Open WebUI compatible reasoning block
                             reasoning_block = (
@@ -932,9 +875,7 @@ class BaseAgentWrapper(ABC):
                             reasoning_block_sent = True
 
                         # Now yield regular content
-                        logger.debug(
-                            f"Yielding RunContentEvent #{chunk_count}, content_length={len(content)}"
-                        )
+                        logger.debug(f"Yielding RunContentEvent #{chunk_count}, content_length={len(content)}")
 
                         yield {
                             "text": content,
@@ -953,47 +894,25 @@ class BaseAgentWrapper(ABC):
                         # Tool call is starting - just log it, don't yield yet
                         if hasattr(chunk, "tool") and chunk.tool:
                             tool = chunk.tool
-                            tool_name = (
-                                tool.tool_name
-                                if hasattr(tool, "tool_name")
-                                else "unknown"
-                            )
-                            tool_args = (
-                                tool.tool_args if hasattr(tool, "tool_args") else {}
-                            )
+                            tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
+                            tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
 
-                            logger.info(
-                                f"🔧 ToolCallStartedEvent #{chunk_count}: {tool_name}({json.dumps(tool_args)})"
-                            )
+                            logger.info(f"🔧 ToolCallStartedEvent #{chunk_count}: {tool_name}({json.dumps(tool_args)})")
                         else:
-                            logger.warning(
-                                f"ToolCallStartedEvent #{chunk_count} has no tool attribute, skipping"
-                            )
+                            logger.warning(f"ToolCallStartedEvent #{chunk_count} has no tool attribute, skipping")
 
                     elif isinstance(chunk, ToolCallCompletedEvent):
                         # Tool call completed - show COMPLETE details block with args and result
                         if hasattr(chunk, "tool") and chunk.tool:
                             tool = chunk.tool
-                            tool_name = (
-                                tool.tool_name
-                                if hasattr(tool, "tool_name")
-                                else "unknown"
-                            )
-                            tool_args = (
-                                tool.tool_args if hasattr(tool, "tool_args") else {}
-                            )
-                            tool_result = (
-                                tool.result if hasattr(tool, "result") else "No result"
-                            )
+                            tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
+                            tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
+                            tool_result = tool.result if hasattr(tool, "result") else "No result"
 
-                            logger.info(
-                                f"✅ ToolCallCompletedEvent #{chunk_count}: {tool_name} → {str(tool_result)[:100]}"
-                            )
+                            logger.info(f"✅ ToolCallCompletedEvent #{chunk_count}: {tool_name} → {str(tool_result)[:100]}")
 
                             # Format complete tool call block (args + result)
-                            args_json = (
-                                json.dumps(tool_args, indent=2) if tool_args else "{}"
-                            )
+                            args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
                             completion_text = f'\n<details type="tool_call" open="true">\n<summary>🔧 Tool: {tool_name}</summary>\n\n**Arguments:**\n```json\n{args_json}\n```\n\n**Result:**\n\n{tool_result}\n\n✅ Completed\n</details>\n\n'
 
                             yield {
@@ -1009,25 +928,25 @@ class BaseAgentWrapper(ABC):
                                 },
                             }
                         else:
-                            logger.warning(
-                                f"ToolCallCompletedEvent #{chunk_count} has no tool attribute, skipping"
-                            )
+                            logger.warning(f"ToolCallCompletedEvent #{chunk_count} has no tool attribute, skipping")
 
                     elif isinstance(chunk, ReasoningStepEvent):
                         # Reasoning step - format similar to Gemini's reasoning blocks
                         reasoning_text = (
                             chunk.reasoning_content
                             if hasattr(chunk, "reasoning_content")
-                            else str(chunk.content) if hasattr(chunk, "content") else ""
+                            else str(chunk.content)
+                            if hasattr(chunk, "content")
+                            else ""
                         )
 
                         if reasoning_text:
-                            logger.info(
-                                f"💭 ReasoningStepEvent #{chunk_count}: {reasoning_text[:100]}"
-                            )
+                            logger.info(f"💭 ReasoningStepEvent #{chunk_count}: {reasoning_text[:100]}")
 
                             # Format as collapsible details block (similar to Gemini)
-                            reasoning_block = f'\n<details type="reasoning">\n<summary>💭 Reasoning Step</summary>\n\n{reasoning_text}\n\n</details>\n\n'
+                            reasoning_block = (
+                                f'\n<details type="reasoning">\n<summary>💭 Reasoning Step</summary>\n\n{reasoning_text}\n\n</details>\n\n'
+                            )
 
                             yield {
                                 "text": reasoning_block,
@@ -1042,15 +961,11 @@ class BaseAgentWrapper(ABC):
                                 },
                             }
                         else:
-                            logger.debug(
-                                f"ReasoningStepEvent #{chunk_count} has no content, skipping"
-                            )
+                            logger.debug(f"ReasoningStepEvent #{chunk_count} has no content, skipping")
 
                     elif isinstance(chunk, RunCompletedEvent):
                         # RunCompletedEvent signals proper stream end
-                        logger.info(
-                            f"✓ RunCompletedEvent received! Stream completed after {chunk_count} events."
-                        )
+                        logger.info(f"✓ RunCompletedEvent received! Stream completed after {chunk_count} events.")
                         # Don't yield RunCompletedEvent - it's a control signal, not content
                         break
 
@@ -1058,15 +973,11 @@ class BaseAgentWrapper(ABC):
                         # Log other events for debugging (e.g., RunStartedEvent, etc.)
                         logger.debug(f"Received event: {chunk_type} (not yielding)")
 
-                logger.info(
-                    f"Stream iteration complete, total events processed: {chunk_count}"
-                )
+                logger.info(f"Stream iteration complete, total events processed: {chunk_count}")
 
             except StopAsyncIteration:
                 # Natural stream end (should not happen if RunCompletedEvent is sent)
-                logger.info(
-                    "Stream ended via StopAsyncIteration (no RunCompletedEvent received)"
-                )
+                logger.info("Stream ended via StopAsyncIteration (no RunCompletedEvent received)")
             except Exception as e:
                 logger.error(f"Error during stream iteration: {e}", exc_info=True)
                 raise
@@ -1086,17 +997,13 @@ class BaseAgentWrapper(ABC):
                 },
             }
 
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (success)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (success)")
             logger.info("=" * 80)
 
         except Exception as e:
             # Agent creation or execution failed
             error_msg = f"❌ Error: {str(e)}"
-            logger.error(
-                f"Failed to stream from agent for user {user_id}: {e}", exc_info=True
-            )
+            logger.error(f"Failed to stream from agent for user {user_id}: {e}", exc_info=True)
 
             # Yield error as GenericStreamingChunk
             yield {
@@ -1126,14 +1033,10 @@ class BaseAgentWrapper(ABC):
                 },
             }
 
-            logger.info(
-                f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (exception)"
-            )
+            logger.info(f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (exception)")
             logger.info("=" * 80)
 
-    def arun(
-        self, message: str, user_id: str | None = None, session_id: str | None = None, stream: bool = False, **kwargs
-    ):
+    def arun(self, message: str, user_id: str | None = None, session_id: str | None = None, stream: bool = False, **kwargs):
         """
         Run the agent asynchronously with configuration management.
 

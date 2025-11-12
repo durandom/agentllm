@@ -139,7 +139,7 @@ class AgnoCustomLLM(CustomLLM):
 
         return session_id, user_id
 
-    def _get_agent(self, model: str, user_id: str | None = None, **kwargs):
+    def _get_agent(self, model: str, user_id: str | None = None, session_id: str | None = None, **kwargs):
         """Get agent instance from model name with parameters.
 
         Uses caching to reuse agent instances for the same configuration and user.
@@ -147,6 +147,7 @@ class AgnoCustomLLM(CustomLLM):
         Args:
             model: Model name (e.g., "agno/release-manager" or just "release-manager")
             user_id: User ID for agent isolation
+            session_id: Session ID for conversation isolation
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
         Returns:
@@ -155,7 +156,7 @@ class AgnoCustomLLM(CustomLLM):
         Raises:
             Exception: If agent not found
         """
-        logger.debug(f"_get_agent() called with model={model}, user_id={user_id}")
+        logger.debug(f"_get_agent() called with model={model}, user_id={user_id}, session_id={session_id}")
 
         # Extract agent name from model (handle both "agno/release-manager" and "release-manager")
         agent_name = model.replace("agno/", "")
@@ -164,7 +165,6 @@ class AgnoCustomLLM(CustomLLM):
         # Extract OpenAI parameters to pass to agent
         temperature = kwargs.get("temperature")
         max_tokens = kwargs.get("max_tokens")
-        session_id = kwargs.get("session_id")
         logger.debug(f"Agent parameters: temperature={temperature}, max_tokens={max_tokens}, session_id={session_id}")
 
         # Build cache key from agent configuration, user_id, and session_id
@@ -312,8 +312,8 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
-        # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        # Get agent instance (with caching based on user_id and session_id)
+        agent = self._get_agent(model, user_id=user_id, session_id=session_id, **kwargs)
 
         logger.info(f"Running agent with session_id={session_id}, user_id={user_id}")
         # Run the agent with session management
@@ -425,8 +425,8 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
-        # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        # Get agent instance (with caching based on user_id and session_id)
+        agent = self._get_agent(model, user_id=user_id, session_id=session_id, **kwargs)
 
         logger.info(f"Running agent asynchronously with session_id={session_id}, user_id={user_id}")
         # Run the agent asynchronously with session management
@@ -479,8 +479,8 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
-        # Get agent instance (with caching based on user_id)
-        agent = self._get_agent(model, user_id=user_id, **kwargs)
+        # Get agent instance (with caching based on user_id and session_id)
+        agent = self._get_agent(model, user_id=user_id, session_id=session_id, **kwargs)
 
         logger.info(f"Starting async streaming with session_id={session_id}, user_id={user_id}")
 

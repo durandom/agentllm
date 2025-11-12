@@ -565,7 +565,7 @@ class BaseAgentWrapper(ABC):
 
         return agent
 
-    def run(self, message: str, user_id: str | None = None, **kwargs) -> Any:
+    def run(self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs) -> Any:
         """
         Run the agent with configuration management (synchronous).
 
@@ -577,13 +577,14 @@ class BaseAgentWrapper(ABC):
         Args:
             message: User message
             user_id: User identifier from OpenWebUI
+            session_id: Session identifier for conversation isolation
             **kwargs: Additional arguments to pass to wrapped agent
 
         Returns:
             RunResponse from agent or configuration prompt
         """
         logger.info("=" * 80)
-        logger.info(f">>> {self.__class__.__name__}.run() STARTED - user_id={user_id}")
+        logger.info(f">>> {self.__class__.__name__}.run() STARTED - user_id={user_id}, session_id={session_id}")
         logger.info(f"Message length: {len(message)}, kwargs: {kwargs}")
 
         # Check configuration and handle if needed
@@ -608,8 +609,12 @@ class BaseAgentWrapper(ABC):
         try:
             logger.info(f"Creating agent for user {user_id}...")
             agent = self._get_or_create_agent(user_id)
-            logger.info(f"Running agent.run() for user {user_id}...")
-            result = agent.run(message, user_id=user_id, **kwargs)
+
+            # Use provided session_id or fall back to instance session_id
+            effective_session_id = session_id if session_id is not None else self._session_id
+
+            logger.info(f"Running agent.run() for user {user_id}, session {effective_session_id}...")
+            result = agent.run(message, user_id=user_id, session_id=effective_session_id, **kwargs)
             logger.info(f"✅ Agent.run() completed, result type: {type(result)}")
             logger.info(f"<<< {self.__class__.__name__}.run() FINISHED (success)")
             logger.info("=" * 80)
@@ -622,10 +627,10 @@ class BaseAgentWrapper(ABC):
             logger.info("=" * 80)
             return self._create_simple_response(error_msg)
 
-    async def _arun_non_streaming(self, message: str, user_id: str | None = None, **kwargs):
+    async def _arun_non_streaming(self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs):
         """Internal async method for non-streaming mode."""
         logger.info("=" * 80)
-        logger.info(f">>> {self.__class__.__name__}._arun_non_streaming() STARTED - user_id={user_id}")
+        logger.info(f">>> {self.__class__.__name__}._arun_non_streaming() STARTED - user_id={user_id}, session_id={session_id}")
         logger.info(f"Message length: {len(message)}, kwargs: {kwargs}")
 
         # Check configuration and handle if needed
@@ -648,8 +653,12 @@ class BaseAgentWrapper(ABC):
         try:
             logger.info(f"Creating agent for user {user_id}...")
             agent = self._get_or_create_agent(user_id)
-            logger.info(f"Running agent.arun() for user {user_id} (non-streaming)...")
-            result = await agent.arun(message, user_id=user_id, **kwargs)
+
+            # Use provided session_id or fall back to instance session_id
+            effective_session_id = session_id if session_id is not None else self._session_id
+
+            logger.info(f"Running agent.arun() for user {user_id}, session {effective_session_id} (non-streaming)...")
+            result = await agent.arun(message, user_id=user_id, session_id=effective_session_id, **kwargs)
             logger.info(f"✅ Agent.arun() completed, result type: {type(result)}")
             logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (success)")
             logger.info("=" * 80)
@@ -662,7 +671,9 @@ class BaseAgentWrapper(ABC):
             logger.info("=" * 80)
             return self._create_simple_response(error_msg)
 
-    async def _arun_streaming(self, message: str, user_id: str | None = None, **kwargs) -> AsyncIterator[dict[str, Any]]:
+    async def _arun_streaming(
+        self, message: str, user_id: str | None = None, session_id: str | None = None, **kwargs
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Internal async generator for streaming mode.
 
@@ -673,7 +684,7 @@ class BaseAgentWrapper(ABC):
             GenericStreamingChunk dictionaries with text field
         """
         logger.info("=" * 80)
-        logger.info(f">>> {self.__class__.__name__}._arun_streaming() STARTED - user_id={user_id}")
+        logger.info(f">>> {self.__class__.__name__}._arun_streaming() STARTED - user_id={user_id}, session_id={session_id}")
         logger.info(f"Message length: {len(message)}, kwargs: {kwargs}")
 
         # Check configuration and handle if needed
@@ -755,11 +766,11 @@ class BaseAgentWrapper(ABC):
             logger.info(f"Creating agent for user {user_id}...")
             agent = self._get_or_create_agent(user_id)
 
-            logger.info(f"Starting agent.arun() streaming for user {user_id}...")
-            chunk_count = 0
+            # Use provided session_id or fall back to instance session_id
+            effective_session_id = session_id if session_id is not None else self._session_id
 
-            # Extract session_id from kwargs if present
-            session_id = kwargs.get("session_id")
+            logger.info(f"Starting agent.arun() streaming for user {user_id}, session {effective_session_id}...")
+            chunk_count = 0
 
             # Get the async generator from agent.arun()
             logger.info("Calling agent.arun() with stream=True...")
@@ -768,7 +779,7 @@ class BaseAgentWrapper(ABC):
                 stream=True,  # Explicit stream mode
                 stream_events=True,  # Get all events, not just RunContent
                 user_id=user_id,
-                session_id=session_id,  # Pass session_id explicitly
+                session_id=effective_session_id,  # Pass session_id explicitly
             )
             logger.debug(f"Stream type: {type(stream)}")
 
@@ -1017,26 +1028,27 @@ class BaseAgentWrapper(ABC):
             logger.info(f"<<< {self.__class__.__name__}._arun_streaming() FINISHED (exception)")
             logger.info("=" * 80)
 
-    def arun(self, message: str, user_id: str | None = None, stream: bool = False, **kwargs):
+    def arun(self, message: str, user_id: str | None = None, session_id: str | None = None, stream: bool = False, **kwargs):
         """
         Run the agent asynchronously with configuration management.
 
         Args:
             message: User message
             user_id: User identifier
+            session_id: Session identifier for conversation isolation
             stream: Whether to stream responses
             **kwargs: Additional arguments to pass to wrapped agent
 
         Returns:
             Coroutine[RunResponse] (non-streaming) or AsyncIterator of GenericStreamingChunk dicts (streaming)
         """
-        logger.debug(f"arun() called with stream={stream}")
+        logger.debug(f"arun() called with stream={stream}, user_id={user_id}, session_id={session_id}")
 
         if stream:
             logger.debug("Delegating to _arun_streaming()")
             # Return async generator directly for streaming
-            return self._arun_streaming(message, user_id, **kwargs)
+            return self._arun_streaming(message, user_id, session_id, **kwargs)
         else:
             logger.debug("Delegating to _arun_non_streaming()")
             # Return coroutine for non-streaming (caller must await)
-            return self._arun_non_streaming(message, user_id, **kwargs)
+            return self._arun_non_streaming(message, user_id, session_id, **kwargs)

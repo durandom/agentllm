@@ -1,7 +1,6 @@
 """This Red Hat AI (RHAI) Roadmap slide publisher Agent."""
 
 import os
-from typing import Any
 
 from agno.db.sqlite import SqliteDb
 from loguru import logger
@@ -151,7 +150,7 @@ You must organize issues into three temporal sections:
 - These are features actively in progress or near completion
 - Provide the most detail for these items
 
-### 2. Next Quarter 
+### 2. Next Quarter
 - Include issues with end dates in the immediately following quarter
 - These are features in planning or early implementation
 - Moderate level of detail

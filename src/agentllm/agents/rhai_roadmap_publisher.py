@@ -79,9 +79,7 @@ class RHAIRoadmapPublisher(BaseAgentWrapper):
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
         jira_config = JiraConfig(token_storage=self._token_storage)
-        system_prompt_config = SystemPromptExtensionConfig(
-            gdrive_config=gdrive_config, token_storage=self._token_storage
-        )
+        system_prompt_config = SystemPromptExtensionConfig(gdrive_config=gdrive_config, token_storage=self._token_storage)
 
         return [
             gdrive_config,
@@ -113,7 +111,7 @@ You are the Roadmap Publisher for Red Hat AI (RHAI), an expert in strategic prod
 ## Core Responsibilities
 
 You will:
-1. **Extract Strategic Features**: Search JIRA project 'RHAI' and 'RHOAI' for issues based on labels or components provided by the user
+1. **Extract Strategic Features**: Search JIRA project 'RHAISTRAT' and 'RHOAISTRAT' for issues based on labels or components provided by the user
 2. **Filter and Organize**: Include only issues matching the specified labels, organizing them by their end dates
 3. **Create Timeline-Based Roadmaps**: Structure features into current quarter, next quarter, and next half-year sections
 4. **Generate Markdown Output**: Produce clear, structured Markdown documents (NOT Google Slides)
@@ -176,12 +174,14 @@ Your roadmap output must be a **Markdown document** with this structure:
 ```markdown
 # Red Hat AI Roadmap - [Feature Area/Label]
 
+Product Manager: [Summarize all product manager names from the issues]
+
 ## Current Quarter: [Quarter Year] (e.g., 3Q 2025)
 
 ### [JIRA-KEY]: [Feature Title]
 - **Status**: [Current Status]
 - **Target Date**: [End Date]
-- **Priority**: [Priority Level]
+- **Taget Version**: [Target Version if available]
 - **Description**: [Brief description of the feature]
 - **Link**: https://issues.redhat.com/browse/[JIRA-KEY]
 
@@ -191,6 +191,7 @@ Your roadmap output must be a **Markdown document** with this structure:
 
 ### [JIRA-KEY]: [Feature Title]
 - **Target Date**: [End Date]
+- **Taget Version**: [Target Version if available]
 - **Description**: [Brief description]
 - **Link**: https://issues.redhat.com/browse/[JIRA-KEY]
 
@@ -200,6 +201,7 @@ Your roadmap output must be a **Markdown document** with this structure:
 
 ### [JIRA-KEY]: [Feature Title]
 - **Target Date**: [End Date or Quarter]
+- **Taget Version**: [Target Version if available]
 - **Strategic Focus**: [High-level description]
 - **Link**: https://issues.redhat.com/browse/[JIRA-KEY]
 
@@ -292,12 +294,8 @@ A successful roadmap will:
 
         # Add Gemini native thinking parameters
         if self._get_model_id().startswith("gemini-"):
-            model_params["thinking_budget"] = (
-                200  # Allocate up to 200 tokens for thinking
-            )
-            model_params["include_thoughts"] = (
-                True  # Request thought summaries in response
-            )
+            model_params["thinking_budget"] = 200  # Allocate up to 200 tokens for thinking
+            model_params["include_thoughts"] = True  # Request thought summaries in response
 
         return model_params
 
@@ -318,7 +316,5 @@ A successful roadmap will:
             for other_config in self.toolkit_configs:
                 if isinstance(other_config, SystemPromptExtensionConfig):
                     other_config.invalidate_for_gdrive_change(user_id)
-                    logger.debug(
-                        "Notified SystemPromptExtensionConfig of GDrive credential change"
-                    )
+                    logger.debug("Notified SystemPromptExtensionConfig of GDrive credential change")
                     break

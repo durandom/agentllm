@@ -2,6 +2,7 @@
 GitHub toolkit for PR review prioritization and repository management.
 """
 
+import base64
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -19,12 +20,17 @@ class GitHubToolkit(Toolkit):
     - Review queue management
     - Repository velocity tracking
     - Smart review suggestions
+    - File and branch management
+    - PR creation and commenting
+    - Fork management (create, sync, list)
+    - User information
     """
 
     def __init__(
         self,
         token: str,
         server_url: str = "https://api.github.com",
+        tools: list[str] | None = None,
         **kwargs,
     ):
         """Initialize GitHub toolkit with credentials.
@@ -32,6 +38,7 @@ class GitHubToolkit(Toolkit):
         Args:
             token: GitHub personal access token
             server_url: GitHub API server URL (default: https://api.github.com)
+            tools: Optional list of tool names to expose. If None, exposes all tools.
             **kwargs: Additional arguments passed to parent Toolkit
         """
         self._token = token
@@ -43,15 +50,32 @@ class GitHubToolkit(Toolkit):
             "Accept": "application/vnd.github.v3+json",
         }
 
-        # Define review-specific tools
-        tools = [
-            self.list_prs,
-            self.prioritize_prs,
-            self.suggest_next_review,
-            self.get_repo_velocity,
-        ]
+        # Map of all available tools
+        all_tools = {
+            "list_prs": self.list_prs,
+            "prioritize_prs": self.prioritize_prs,
+            "suggest_next_review": self.suggest_next_review,
+            "get_repo_velocity": self.get_repo_velocity,
+            "get_file": self.get_file,
+            "list_directory": self.list_directory,
+            "get_branch_info": self.get_branch_info,
+            "create_branch": self.create_branch,
+            "create_or_update_file": self.create_or_update_file,
+            "create_pull_request": self.create_pull_request,
+            "add_pr_comment": self.add_pr_comment,
+            "sync_fork": self.sync_fork,
+            "create_fork": self.create_fork,
+            "get_user_forks": self.get_user_forks,
+            "get_user_info": self.get_user_info,
+        }
 
-        super().__init__(name="github_review_tools", tools=tools, **kwargs)
+        # Select subset if specified, otherwise use all
+        if tools is not None:
+            selected_tools = [all_tools[name] for name in tools if name in all_tools]
+        else:
+            selected_tools = list(all_tools.values())
+
+        super().__init__(name="github_tools", tools=selected_tools, **kwargs)
 
     def validate_connection(self) -> tuple[bool, str]:
         """Validate the GitHub connection by authenticating.
@@ -79,6 +103,42 @@ class GitHubToolkit(Toolkit):
             error_msg = f"Failed to connect to GitHub: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
+
+    def get_user_info(self) -> str:
+        """Get information about the currently authenticated user.
+
+        Returns:
+            JSON string containing user information (login, name, email, html_url, etc.)
+        """
+        try:
+            logger.info("Getting authenticated user info")
+            url = f"{self._server_url}/user"
+            response = requests.get(url, headers=self._headers, timeout=10)
+
+            if response.status_code != 200:
+                error_msg = f"GitHub API error: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+            user_data = response.json()
+            
+            # Filter to relevant fields
+            info = {
+                "login": user_data.get("login"),
+                "name": user_data.get("name"),
+                "email": user_data.get("email"),
+                "html_url": user_data.get("html_url"),
+                "type": user_data.get("type"),
+                "company": user_data.get("company"),
+                "location": user_data.get("location"),
+            }
+            
+            return json.dumps(info, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error getting user info: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
 
     def list_prs(self, repo: str, state: str = "open", limit: int = 20) -> str:
         """List pull requests in simple markdown format with high-level information.
@@ -535,6 +595,465 @@ class GitHubToolkit(Toolkit):
 
         except Exception as e:
             error_msg = f"Error getting repo velocity for {repo}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def get_file(self, repo: str, path: str, branch: str = "main") -> str:
+        """Get file content from GitHub.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            path: File path in repository
+            branch: Branch to read from (default: "main")
+
+        Returns:
+            Content of the file as string (UTF-8 decoded)
+        """
+        try:
+            logger.info(f"Reading file {path} from {repo} on branch {branch}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return "**Error**: Repository must be in format 'owner/repo'"
+
+            owner, repo_name = parts
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/contents/{path}"
+            params = {"ref": branch}
+            response = requests.get(url, headers=self._headers, params=params, timeout=30)
+
+            if response.status_code != 200:
+                error_msg = f"GitHub API error: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return f"**Error**: {error_msg}"
+
+            data = response.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            return content
+
+        except Exception as e:
+            error_msg = f"Error reading file {path}: {str(e)}"
+            logger.error(error_msg)
+            return f"**Error**: {error_msg}"
+
+    def list_directory(self, repo: str, path: str, branch: str = "main") -> str:
+        """List directory contents from GitHub.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            path: Directory path in repository
+            branch: Branch to read from (default: "main")
+
+        Returns:
+            JSON string containing list of files/directories
+        """
+        try:
+            logger.info(f"Listing directory {path} from {repo} on branch {branch}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/contents/{path}"
+            params = {"ref": branch}
+            response = requests.get(url, headers=self._headers, params=params, timeout=30)
+
+            if response.status_code != 200:
+                error_msg = f"GitHub API error: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+            data = response.json()
+            # Format output to be more readable/useful
+            result = [
+                {
+                    "name": item["name"],
+                    "path": item["path"],
+                    "type": item["type"],
+                    "size": item.get("size", 0),
+                }
+                for item in data
+            ]
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error listing directory {path}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def get_branch_info(self, repo: str, branch: str) -> str:
+        """Get branch information including SHA.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            branch: Branch name
+
+        Returns:
+            JSON string containing branch metadata including SHA
+        """
+        try:
+            logger.info(f"Getting info for branch {branch} in {repo}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/branches/{branch}"
+            response = requests.get(url, headers=self._headers, timeout=30)
+
+            if response.status_code != 200:
+                error_msg = f"GitHub API error: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+            data = response.json()
+            return json.dumps(
+                {
+                    "name": data["name"],
+                    "sha": data["commit"]["sha"],
+                    "protected": data.get("protected", False),
+                },
+                indent=2,
+            )
+
+        except Exception as e:
+            error_msg = f"Error getting branch info for {branch}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def create_branch(self, repo: str, base_branch: str, new_branch_name: str) -> str:
+        """Create a new branch from a base branch.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            base_branch: Name of the base branch (e.g., "main")
+            new_branch_name: Name of the new branch to create
+
+        Returns:
+            JSON string with result status
+        """
+        try:
+            logger.info(f"Creating branch {new_branch_name} from {base_branch} in {repo}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            # Get SHA of base branch
+            base_info_json = self.get_branch_info(repo, base_branch)
+            base_info = json.loads(base_info_json)
+
+            if "error" in base_info:
+                return base_info_json
+
+            sha = base_info["sha"]
+
+            # Create new branch
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/git/refs"
+            data = {"ref": f"refs/heads/{new_branch_name}", "sha": sha}
+            response = requests.post(url, headers=self._headers, json=data, timeout=30)
+
+            if response.status_code == 201:
+                return json.dumps(
+                    {"status": "success", "message": f"Branch {new_branch_name} created successfully", "sha": sha}
+                )
+            else:
+                error_msg = f"Failed to create branch: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error creating branch {new_branch_name}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def create_or_update_file(
+        self, repo: str, branch: str, path: str, content: str, message: str, sha: str | None = None
+    ) -> str:
+        """Create or update a file in the repository.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            branch: Branch to commit to
+            path: File path in repository
+            content: New file content (text)
+            message: Commit message
+            sha: SHA of the file being replaced (required for updates, optional for creation)
+
+        Returns:
+            JSON string with commit result
+        """
+        try:
+            logger.info(f"Writing file {path} to {repo} on branch {branch}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            # If sha not provided, try to get it (might be an update)
+            if not sha:
+                try:
+                    # Check if file exists
+                    url_get = f"{self._server_url}/repos/{owner}/{repo_name}/contents/{path}"
+                    params = {"ref": branch}
+                    resp_get = requests.get(url_get, headers=self._headers, params=params, timeout=10)
+                    if resp_get.status_code == 200:
+                        sha = resp_get.json()["sha"]
+                except Exception:
+                    pass  # File probably doesn't exist, proceed with creation
+
+            # Encode content
+            encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/contents/{path}"
+            data = {
+                "message": message,
+                "content": encoded_content,
+                "branch": branch,
+            }
+            if sha:
+                data["sha"] = sha
+
+            response = requests.put(url, headers=self._headers, json=data, timeout=30)
+
+            if response.status_code in [200, 201]:
+                result = response.json()
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "content": result["content"],
+                        "commit": result["commit"],
+                    }
+                )
+            else:
+                error_msg = f"Failed to write file: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error writing file {path}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def create_pull_request(
+        self, repo: str, head_branch: str, base_branch: str, title: str, body: str
+    ) -> str:
+        """Create a pull request.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            head_branch: Name of the branch containing changes (can be "owner:branch" for forks)
+            base_branch: Name of the branch to merge into (e.g., "main")
+            title: Title of the pull request
+            body: Description/body of the pull request
+
+        Returns:
+            JSON string with created PR details including number and URL
+        """
+        try:
+            logger.info(f"Creating PR in {repo}: {head_branch} -> {base_branch}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/pulls"
+            data = {
+                "title": title,
+                "body": body,
+                "head": head_branch,
+                "base": base_branch,
+            }
+
+            response = requests.post(url, headers=self._headers, json=data, timeout=30)
+
+            if response.status_code == 201:
+                pr = response.json()
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "number": pr["number"],
+                        "url": pr["html_url"],
+                        "title": pr["title"],
+                    }
+                )
+            else:
+                error_msg = f"Failed to create PR: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error creating PR: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def add_pr_comment(self, repo: str, pr_number: int, comment: str) -> str:
+        """Add a comment to a pull request.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            pr_number: Pull request number
+            comment: Comment text
+
+        Returns:
+            JSON string with result status
+        """
+        try:
+            logger.info(f"Adding comment to PR #{pr_number} in {repo}")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/issues/{pr_number}/comments"
+            data = {"body": comment}
+
+            response = requests.post(url, headers=self._headers, json=data, timeout=30)
+
+            if response.status_code == 201:
+                return json.dumps({"status": "success", "message": "Comment added successfully"})
+            else:
+                error_msg = f"Failed to add comment: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error adding comment to PR #{pr_number}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def sync_fork(self, repo: str, branch: str = "main") -> str:
+        """Sync a fork with its upstream repository.
+
+        Args:
+            repo: Repository in format "owner/repo"
+            branch: Branch to sync (default: "main")
+
+        Returns:
+            JSON string with result status
+        """
+        try:
+            logger.info(f"Syncing fork {repo} branch {branch} with upstream")
+
+            parts = repo.split("/")
+            if len(parts) != 2:
+                return json.dumps({"error": "Repository must be in format 'owner/repo'"})
+
+            owner, repo_name = parts
+
+            # Use GitHub's merge-upstream endpoint
+            url = f"{self._server_url}/repos/{owner}/{repo_name}/merge-upstream"
+            data = {"branch": branch}
+
+            response = requests.post(url, headers=self._headers, json=data, timeout=30)
+
+            if response.status_code in [200, 409]:  # 409 conflict means branch is already up to date or conflict
+                # Even if 409, check message to distinguish conflict vs up-to-date
+                result = response.json()
+                return json.dumps(
+                    {
+                        "status": "success" if response.status_code == 200 else "info",
+                        "message": result.get("message", "Sync attempted"),
+                    }
+                )
+            else:
+                error_msg = f"Failed to sync fork: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error syncing fork {repo}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def create_fork(self, owner: str, repo: str) -> str:
+        """Create a fork of a repository.
+
+        Args:
+            owner: Owner of the upstream repository
+            repo: Name of the upstream repository
+
+        Returns:
+            JSON string with created fork details
+        """
+        try:
+            logger.info(f"Creating fork of {owner}/{repo}")
+
+            url = f"{self._server_url}/repos/{owner}/{repo}/forks"
+            response = requests.post(url, headers=self._headers, timeout=30)
+
+            if response.status_code == 202:
+                fork = response.json()
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "message": "Fork creation started",
+                        "full_name": fork.get("full_name"),
+                        "html_url": fork.get("html_url"),
+                    }
+                )
+            else:
+                error_msg = f"Failed to create fork: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+        except Exception as e:
+            error_msg = f"Error creating fork of {owner}/{repo}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def get_user_forks(self, repo_name: str) -> str:
+        """Get user's forks of a specific repository.
+
+        Args:
+            repo_name: Name of the repository to check for (e.g., "rhdh-test-instance")
+
+        Returns:
+            JSON string with list of matching forks
+        """
+        try:
+            logger.info(f"Searching for user fork of {repo_name}")
+
+            # Get user's repositories
+            url = f"{self._server_url}/user/repos"
+            params = {"type": "public", "per_page": 100}  # Assuming public forks
+            response = requests.get(url, headers=self._headers, params=params, timeout=30)
+
+            if response.status_code != 200:
+                error_msg = f"GitHub API error: {response.status_code} {response.text}"
+                logger.error(error_msg)
+                return json.dumps({"error": error_msg})
+
+            repos = response.json()
+            forks = [
+                {
+                    "full_name": r["full_name"],
+                    "owner": r["owner"]["login"],
+                    "name": r["name"],
+                    "fork": r["fork"],
+                    "html_url": r["html_url"],
+                }
+                for r in repos
+                if r["name"] == repo_name and r["fork"] is True
+            ]
+
+            logger.info(f"Found {len(forks)} forks of {repo_name}")
+            return json.dumps(forks, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error finding forks of {repo_name}: {str(e)}"
             logger.error(error_msg)
             return json.dumps({"error": error_msg})
 

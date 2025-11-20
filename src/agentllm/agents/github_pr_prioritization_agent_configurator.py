@@ -57,8 +57,15 @@ class GitHubReviewAgentConfigurator(AgentConfigurator):
         Returns:
             List of toolkit configuration instances
         """
+        # Specify only PR review tools
+        review_tools = [
+            "list_prs",
+            "prioritize_prs",
+            "suggest_next_review",
+            "get_repo_velocity",
+        ]
         return [
-            GitHubConfig(token_storage=self._token_storage),  # Optional: prompts when GitHub mentioned
+            GitHubConfig(token_storage=self._token_storage, tools=review_tools),  # Optional: prompts when GitHub mentioned
         ]
 
     def _get_agent_name(self) -> str:

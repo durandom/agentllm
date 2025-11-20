@@ -286,6 +286,35 @@ Agent provides scored PR list with detailed breakdown, emoji indicators (🔴 Cr
 - `suggest_next_review(repo, reviewer)` - Smart recommendation with reasoning
 - `get_repo_velocity(repo, days)` - Repository merge velocity metrics (all authors)
 
+### RHDH Tester (`agno/rhdh-tester`)
+
+**Purpose**: Create new Red Hat Developer Hub (RHDH/Backstage) testing instances by automating the PR workflow.
+
+**Setup**:
+Same as GitHub PR Prioritization agent (uses same token storage).
+
+**Usage Examples**:
+- "Create RHDH test instance with GitHub OAuth authentication"
+- "Deploy Backstage with Kubernetes plugin and ArgoCD integration"
+- "Set up test environment with custom catalog location at https://github.com/myorg/catalog"
+- "Create instance enabling Tekton, Quay, and Topology plugins"
+
+**Workflow**:
+1. Parses user requirements for Backstage/RHDH features
+2. Reads current config from `redhat-developer/rhdh-test-instance`
+3. Merges user requirements with existing config using intelligent YAML merging
+4. Creates a new branch and commits changes
+5. Opens a PR and triggers deployment with `/test` comment
+
+**Tools Available** (Subset of GitHubToolkit):
+- `get_file(repo, path, branch)` - Read file content
+- `list_directory(repo, path, branch)` - List directory contents
+- `get_branch_info(repo, branch)` - Get branch SHA
+- `create_branch(repo, base_branch, new_branch_name)` - Create new branch
+- `create_or_update_file(repo, branch, path, content, message)` - Commit file changes
+- `create_pull_request(repo, head_branch, base_branch, title, body)` - Open PR
+- `add_pr_comment(repo, pr_number, comment)` - Add deployment trigger comment
+
 ## Key Files
 
 ```
@@ -301,10 +330,11 @@ src/agentllm/
 │   ├── release_manager.py         # Production agent wrapper
 │   ├── demo_agent.py              # Reference implementation
 │   ├── github_pr_prioritization_agent.py  # GitHub PR review agent
+│   ├── rhdh_tester.py             # RHDH Tester agent
 │   └── toolkit_configs/           # Toolkit config implementations
 │       └── github_config.py       # GitHub token & toolkit config
 ├── tools/
-│   └── github_toolkit.py          # GitHub PR review tools
+│   └── github_toolkit.py          # GitHub PR review & creation tools
 └── db/token_storage.py            # SQLite credential storage
 ```
 

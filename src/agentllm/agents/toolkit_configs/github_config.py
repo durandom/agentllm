@@ -20,15 +20,22 @@ class GitHubConfig(BaseToolkitConfig):
         The token is validated by authenticating with the GitHub API.
     """
 
-    def __init__(self, server_url: str = "https://api.github.com", token_storage=None):
+    def __init__(
+        self,
+        server_url: str = "https://api.github.com",
+        token_storage=None,
+        tools: list[str] | None = None,
+    ):
         """Initialize GitHub configuration.
 
         Args:
             server_url: GitHub API server URL (default: https://api.github.com)
             token_storage: TokenStorage instance for database-backed credentials
+            tools: Optional list of tool names to expose. If None, exposes all tools.
         """
         super().__init__(token_storage)
         self._server_url = server_url
+        self._tools = tools
 
         # Store per-user GitHub toolkits (in-memory cache)
         self._github_toolkits: dict[str, object] = {}
@@ -109,6 +116,7 @@ class GitHubConfig(BaseToolkitConfig):
             toolkit = GitHubToolkit(
                 token=token,
                 server_url=self._server_url,
+                tools=self._tools,
             )
 
             # Validate the connection
@@ -222,6 +230,7 @@ class GitHubConfig(BaseToolkitConfig):
                 toolkit = GitHubToolkit(
                     token=token_data["token"],
                     server_url=token_data["server_url"],
+                    tools=self._tools,
                 )
                 logger.info(f"Recreated GitHub toolkit from database for user {user_id}")
             except Exception as e:
@@ -236,6 +245,7 @@ class GitHubConfig(BaseToolkitConfig):
                 toolkit = GitHubToolkit(
                     token=token,
                     server_url=self._server_url,
+                    tools=self._tools,
                 )
                 logger.info(f"Recreated GitHub toolkit (legacy) for user {user_id}")
 

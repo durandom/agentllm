@@ -5,6 +5,7 @@ from .gdrive_config import GoogleDriveConfig
 from .gdrive_service_account_config import GDriveServiceAccountConfig
 from .github_config import GitHubConfig
 from .jira_config import JiraConfig
+from .rhcp_config import RHCPConfig
 from .rhai_toolkit_config import RHAIToolkitConfig
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "GDriveServiceAccountConfig",
     "GitHubConfig",
     "JiraConfig",
+    "RHCPConfig",
     "RHAIToolkitConfig",
 ]

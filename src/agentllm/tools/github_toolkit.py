@@ -65,7 +65,6 @@ class GitHubToolkit(Toolkit):
             "add_pr_comment": self.add_pr_comment,
             "sync_fork": self.sync_fork,
             "create_fork": self.create_fork,
-            "get_user_forks": self.get_user_forks,
             "get_user_info": self.get_user_info,
         }
 
@@ -1011,49 +1010,6 @@ class GitHubToolkit(Toolkit):
 
         except Exception as e:
             error_msg = f"Error creating fork of {owner}/{repo}: {str(e)}"
-            logger.error(error_msg)
-            return json.dumps({"error": error_msg})
-
-    def get_user_forks(self, repo_name: str) -> str:
-        """Get user's forks of a specific repository.
-
-        Args:
-            repo_name: Name of the repository to check for (e.g., "rhdh-test-instance")
-
-        Returns:
-            JSON string with list of matching forks
-        """
-        try:
-            logger.info(f"Searching for user fork of {repo_name}")
-
-            # Get user's repositories
-            url = f"{self._server_url}/user/repos"
-            params = {"type": "public", "per_page": 100}  # Assuming public forks
-            response = requests.get(url, headers=self._headers, params=params, timeout=30)
-
-            if response.status_code != 200:
-                error_msg = f"GitHub API error: {response.status_code} {response.text}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
-
-            repos = response.json()
-            forks = [
-                {
-                    "full_name": r["full_name"],
-                    "owner": r["owner"]["login"],
-                    "name": r["name"],
-                    "fork": r["fork"],
-                    "html_url": r["html_url"],
-                }
-                for r in repos
-                if r["name"] == repo_name and r["fork"] is True
-            ]
-
-            logger.info(f"Found {len(forks)} forks of {repo_name}")
-            return json.dumps(forks, indent=2)
-
-        except Exception as e:
-            error_msg = f"Error finding forks of {repo_name}: {str(e)}"
             logger.error(error_msg)
             return json.dumps({"error": error_msg})
 

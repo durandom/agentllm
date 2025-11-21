@@ -155,47 +155,83 @@ class KnowledgeManager:
 
         return knowledge
 
-    def _add_documents_sync(self, md_files: list[Path], pdf_files: list[Path], csv_files: list[Path]) -> None:
-        """Add documents to knowledge base with proper event loop handling.
+    async def _add_documents_async(self, md_files: list[Path], pdf_files: list[Path], csv_files: list[Path]) -> None:
+        """Add documents to knowledge base asynchronously.
 
-        This method ensures async operations (embedding extraction) run in a
-        proper event loop context to avoid "Event loop is closed" errors.
+        This properly awaits all async operations to ensure embeddings are
+        extracted and documents are fully indexed before returning.
 
         Args:
             md_files: List of markdown file paths
             pdf_files: List of PDF file paths
             csv_files: List of CSV file paths
         """
+        # Add all markdown files
+        for md_file in md_files:
+            logger.debug(f"Adding markdown file: {md_file}")
+            await self._knowledge.add_content_async(path=str(md_file))
+
+        # Add all PDF files
+        for pdf_file in pdf_files:
+            logger.debug(f"Adding PDF file: {pdf_file}")
+            await self._knowledge.add_content_async(path=str(pdf_file))
+
+        # Add all CSV files
+        for csv_file in csv_files:
+            logger.debug(f"Adding CSV file: {csv_file}")
+            await self._knowledge.add_content_async(path=str(csv_file))
+
+    def _add_documents_sync(self, md_files: list[Path], pdf_files: list[Path], csv_files: list[Path]) -> None:
+        """Add documents to knowledge base with proper event loop handling.
+
+        This method ensures async operations (embedding extraction) run in a
+        proper event loop context and complete fully before returning.
+
+        When called from within an async context (e.g., LiteLLM proxy), this runs
+        in a separate thread with its own event loop to avoid conflicts.
+
+        Args:
+            md_files: List of markdown file paths
+            pdf_files: List of PDF file paths
+            csv_files: List of CSV file paths
+        """
+        import concurrent.futures
+
+        def _load_in_thread():
+            """Run async document loading in a thread with its own event loop."""
+            # Create new event loop for this thread
+            thread_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(thread_loop)
+
+            try:
+                # Run the async loading and wait for it to complete
+                thread_loop.run_until_complete(self._add_documents_async(md_files, pdf_files, csv_files))
+            finally:
+                # Clean up: close the loop
+                try:
+                    # Give pending tasks a chance to complete
+                    pending = asyncio.all_tasks(thread_loop)
+                    if pending:
+                        thread_loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception as e:
+                    logger.debug(f"Error during task cleanup: {e}")
+                finally:
+                    thread_loop.close()
+
+        # Check if we're in a running event loop
         try:
-            # Try to get the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                # Create a new event loop if the current one is closed
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            asyncio.get_running_loop()
+            # We're in a running event loop (e.g., LiteLLM proxy)
+            # Run in a separate thread to avoid conflicts
+            logger.debug("Running in async context - using thread pool for document loading")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_load_in_thread)
+                future.result()  # Block until loading is complete
+                logger.debug("Document loading completed in thread")
         except RuntimeError:
-            # No event loop exists, create one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        try:
-            # Add all markdown files
-            for md_file in md_files:
-                logger.debug(f"Adding markdown file: {md_file}")
-                self._knowledge.add_content(path=str(md_file))
-
-            # Add all PDF files
-            for pdf_file in pdf_files:
-                logger.debug(f"Adding PDF file: {pdf_file}")
-                self._knowledge.add_content(path=str(pdf_file))
-
-            # Add all CSV files
-            for csv_file in csv_files:
-                logger.debug(f"Adding CSV file: {csv_file}")
-                self._knowledge.add_content(path=str(csv_file))
-        finally:
-            # Don't close the loop as it might be needed by other operations
-            pass
+            # No running event loop - we can use asyncio.run directly
+            logger.debug("No running event loop - loading documents with asyncio.run")
+            asyncio.run(self._add_documents_async(md_files, pdf_files, csv_files))
 
     def load_knowledge(self, recreate: bool = False, force_reload: bool = False) -> Knowledge:
         """

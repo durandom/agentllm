@@ -96,6 +96,7 @@ class JiraConfig(BaseToolkitConfig):
                 create_issue=False,
                 extract_sprint_info=True,
                 get_sprint_metrics=True,
+                update_issue=True,
             )
 
             # Validate the connection
@@ -195,6 +196,7 @@ class JiraConfig(BaseToolkitConfig):
                     create_issue=False,
                     extract_sprint_info=True,
                     get_sprint_metrics=True,
+                    update_issue=True,
                 )
                 logger.info(f"Recreated JIRA toolkit from database for user {user_id}")
             except Exception as e:
@@ -213,6 +215,7 @@ class JiraConfig(BaseToolkitConfig):
                     create_issue=False,
                     extract_sprint_info=True,
                     get_sprint_metrics=True,
+                    update_issue=True,
                 )
                 logger.info(f"Recreated JIRA toolkit (legacy) for user {user_id}")
 

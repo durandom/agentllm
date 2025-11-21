@@ -46,6 +46,13 @@ model_list:
       custom_llm_provider: agno
     model_info:
       description: "RHDH Support Focal - Monitoring support issues, customer cases, and team assignments"
+
+  - model_name: agno/jira-triager
+    litellm_params:
+      model: agno/jira-triager
+      custom_llm_provider: agno
+    model_info:
+      description: "Jira Triager agent for RAG-powered team and component recommendations for Jira tickets"
       mode: chat
 
   # Google Gemini 2.5 models

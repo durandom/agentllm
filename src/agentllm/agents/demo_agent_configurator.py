@@ -73,7 +73,10 @@ class DemoAgentConfigurator(AgentConfigurator):
         Returns:
             dict: Knowledge configuration with knowledge_path and table_name
         """
-        return {"knowledge_path": "knowledge/demo-agent", "table_name": "demo_knowledge"}
+        return {
+            "knowledge_path": "knowledge/demo-agent",
+            "table_name": "demo_knowledge",
+        }
 
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
         """Initialize toolkit configurations for Demo Agent.
@@ -82,7 +85,9 @@ class DemoAgentConfigurator(AgentConfigurator):
             list[BaseToolkitConfig]: List of toolkit configs
         """
         return [
-            FavoriteColorConfig(token_storage=self._token_storage),  # Required configuration
+            FavoriteColorConfig(
+                token_storage=self._token_storage
+            ),  # Required configuration
         ]
 
     def _build_agent_instructions(self) -> list[str]:

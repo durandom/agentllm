@@ -59,4 +59,4 @@ tmp/
 
 # Claude
 .claude/settings.local.json
-knowledge/
+knowledge/store-manager/

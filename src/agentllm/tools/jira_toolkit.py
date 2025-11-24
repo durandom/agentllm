@@ -104,6 +104,7 @@ class JiraTools(Toolkit):
         create_issue: bool = False,
         extract_sprint_info: bool = True,
         get_sprint_metrics: bool = True,
+        update_issue: bool = False,
         **kwargs,
     ):
         """Initialize Jira toolkit with credentials.
@@ -118,6 +119,7 @@ class JiraTools(Toolkit):
             create_issue: Include create_issue tool (default: False)
             extract_sprint_info: Include extract_sprint_info tool (default: True)
             get_sprint_metrics: Include get_sprint_metrics tool (default: True)
+            update_issue: Include update_issue tool (default: False)
             **kwargs: Additional arguments passed to parent Toolkit
         """
         self._token = token
@@ -139,6 +141,8 @@ class JiraTools(Toolkit):
             tools.append(self.extract_sprint_info)
         if get_sprint_metrics:
             tools.append(self.get_sprint_metrics)
+        if update_issue:
+            tools.append(self.update_issue)
 
         super().__init__(name="jira_tools", tools=tools, **kwargs)
 
@@ -776,3 +780,109 @@ class JiraTools(Toolkit):
             error_msg = f"Error calculating sprint metrics for sprint_id={sprint_id}: {str(e)}"
             logger.error(error_msg)
             return json.dumps({"error": error_msg})
+    def update_issue(
+        self,
+        *,  # Force all parameters to be keyword-only
+        issue_key: str,
+        team_id: str | None = None,
+        components: str | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+        assignee: str | None = None,
+        labels: str | None = None,
+    ) -> str:
+        """Update an existing Jira issue.
+
+        This tool allows updating various fields of a Jira issue including team assignment,
+        components, summary, description, assignee, and labels.
+
+        IMPORTANT: Only pass parameters for fields you want to UPDATE. Do NOT pass
+        current values for fields you're not changing.
+
+        NOTE: All parameters are keyword-only and must be passed by name.
+
+        Args:
+            issue_key: The Jira issue key (e.g., "RHIDP-6496") (keyword-only)
+            team: (keyword-only) Team ID as a plain string (custom field customfield_12313240).
+                  Use team ID from team_id_map. Example: "4267"
+            components: (keyword-only) Comma-separated list of component names to set
+            summary: (keyword-only) New summary/title for the issue (only pass if updating)
+            description: (keyword-only) New description for the issue (only pass if updating)
+            assignee: (keyword-only) Username or email of the assignee (only pass if updating)
+            labels: (keyword-only) Comma-separated list of labels to set (only pass if updating)
+
+        Returns:
+            JSON string with update status and message
+        """
+        try:
+            logger.info(f"Updating issue {issue_key}")
+            jira = self._get_jira_client()
+
+            # Build fields dictionary with only provided values
+            fields = {}
+
+            # Team field (custom field)
+            if team_id is not None:
+                fields["customfield_12313240"] = team_id
+                logger.debug(f"Setting team to: {team_id}")
+
+            # Components
+            if components is not None:
+                component_list = [c.strip() for c in components.split(",") if c.strip()]
+                fields["components"] = [{"name": comp} for comp in component_list]
+                logger.debug(f"Setting components to: {component_list}")
+
+            # Summary
+            if summary is not None:
+                fields["summary"] = summary
+                logger.debug(f"Setting summary to: {summary[:50]}...")
+
+            # Description
+            if description is not None:
+                fields["description"] = description
+                logger.debug(f"Setting description (length: {len(description)})")
+
+            # Assignee
+            if assignee is not None:
+                # Try to set assignee, handle -1 for unassigned
+                if assignee == "-1" or assignee.lower() == "unassigned":
+                    fields["assignee"] = None
+                    logger.debug("Unsetting assignee")
+                else:
+                    fields["assignee"] = {"name": assignee}
+                    logger.debug(f"Setting assignee to: {assignee}")
+
+            # Labels
+            if labels is not None:
+                label_list = [l.strip() for l in labels.split(",") if l.strip()]
+                fields["labels"] = label_list
+                logger.debug(f"Setting labels to: {label_list}")
+
+            if not fields:
+                return json.dumps({
+                    "status": "skipped",
+                    "message": "No fields provided to update"
+                })
+
+            logger.debug(f"Update fields: {fields}")
+
+            # Perform the update
+            issue = jira.issue(issue_key)
+            issue.update(fields=fields)
+            logger.debug(f"Updated issue {issue_key} with fields: {fields}")
+
+            issue_url = f"{self._server_url}/browse/{issue_key}"
+            logger.info(f"Successfully updated issue {issue_key}")
+
+            return json.dumps({
+                "key": issue_key,
+                "url": issue_url,
+                "status": "success",
+                "message": f"Issue {issue_key} updated successfully",
+                "updated_fields": list(fields.keys())
+            })
+
+        except Exception as e:
+            error_msg = f"Error updating issue {issue_key}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg, "status": "failed"})

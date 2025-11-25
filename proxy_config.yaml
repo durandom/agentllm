@@ -40,12 +40,15 @@ model_list:
       custom_llm_provider: agno
     model_info:
       description: "Sprint review assistant for creating team sprint reviews with metrics and issue details"
+      mode: chat
+
   - model_name: agno/rhdh-support
     litellm_params:
       model: agno/rhdh-support
       custom_llm_provider: agno
     model_info:
       description: "RHDH Support Focal - Monitoring support issues, customer cases, and team assignments"
+      mode: chat
 
   - model_name: agno/jira-triager
     litellm_params:
@@ -53,6 +56,14 @@ model_list:
       custom_llm_provider: agno
     model_info:
       description: "Jira Triager agent for RAG-powered team and component recommendations for Jira tickets"
+      mode: chat
+
+  - model_name: agno/store-manager
+    litellm_params:
+      model: agno/store-manager
+      custom_llm_provider: agno
+    model_info:
+      description: "RHDH Plugin Store Manager - Catalog management, certification, and plugin lifecycle guidance"
       mode: chat
 
   # Google Gemini 2.5 models

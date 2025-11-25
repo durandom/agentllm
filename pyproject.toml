@@ -17,6 +17,8 @@ dependencies = [
   "tantivy>=0.22.0",
   "pypdf>=5.1.0",
   "pandas>=2.0.0",
+  "aiofiles>=24.1.0",
+  "duckdb>=1.1.0",
 ]
 description = "Custom LiteLLM provider for Agno agents - OpenAI-compatible API for Agno"
 name = "agentllm"
@@ -34,6 +36,7 @@ github-pr-prioritization = "agentllm.agents.github_pr_prioritization_agent:GitHu
 sprint-reviewer = "agentllm.agents.sprint_reviewer:SprintReviewerFactory"
 rhdh-support = "agentllm.agents.rhdh_support:RHDHSupportFactory"
 jira-triager = "agentllm.agents.jira_triager:JiraTriagerFactory"
+store-manager = "agentllm.agents.store_manager_agent:StoreManagerAgentFactory"
 
 [build-system]
 build-backend = "hatchling.build"

@@ -227,9 +227,12 @@ def first_user(db: str):
 
         if both_tokens:
             # Get the most recently updated one
-            user_id = sorted(both_tokens)[0]  # Sort for consistency
-            click.echo(user_id)
-            return
+            most_recent = session.query(JiraToken).filter(
+                JiraToken.user_id.in_(both_tokens)
+            ).order_by(JiraToken.updated_at.desc()).first()
+            if most_recent:
+                click.echo(most_recent.user_id)
+                return
 
         # Fallback: any user with any token
         all_users = jira_users | gdrive_users

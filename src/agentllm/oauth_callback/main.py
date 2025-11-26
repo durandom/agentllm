@@ -30,6 +30,11 @@ app = FastAPI(
 AGENTLLM_DATA_DIR = os.getenv("AGENTLLM_DATA_DIR", "/app/tmp")
 DB_PATH = os.path.join(AGENTLLM_DATA_DIR, "agno_sessions.db")
 
+# Discover and register all toolkit token types
+from agentllm.agents.toolkit_configs import discover_and_register_toolkits  # noqa: E402
+
+discover_and_register_toolkits()
+
 # Initialize shared database and token storage (with encryption)
 shared_db = SqliteDb(db_file=DB_PATH)
 try:

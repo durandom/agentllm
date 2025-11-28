@@ -80,7 +80,10 @@ class JiraTriagerConfigurator(AgentConfigurator):
         """
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
-        jira_config = JiraConfig(token_storage=self._token_storage)
+        jira_config = JiraConfig(
+            token_storage=self._token_storage,
+            update_issue=True,
+        )
         jira_triager_toolkit = JiraTriagerToolkitConfig(
             token_storage=self._token_storage,
         )
@@ -127,9 +130,11 @@ class JiraTriagerConfigurator(AgentConfigurator):
             "",
             "AVAILABLE TOOLS:",
             "- triage_ticket: Analyze ticket and recommend assignments (returns allowed_components)",
-            "- get_issue: Fetch ticket details",
-            "- search_issues: Search tickets using JQL",
-            "- update_issue: Update ticket fields",
+            "- get_issue: Fetch single ticket details",
+            "- get_issues_summary: Search tickets using JQL (basic key/summary/status)",
+            "- get_issues_detailed: Search tickets using JQL with custom fields",
+            "- get_issues_stats: Get issue statistics and breakdowns",
+            "- update_issue: Update ticket fields (team, components)",
             "",
             "CONFIDENCE SCORING:",
             "- 95%: Specific component + keywords + assignee validation",
@@ -144,7 +149,7 @@ class JiraTriagerConfigurator(AgentConfigurator):
             "",
             "BATCH TRIAGE WORKFLOW:",
             "When triaging multiple issues (e.g., 'triage all issues in queue'):",
-            "1. Use search_issues to find all tickets from the configured filter",
+            "1. Use get_issues_summary to find all tickets from the configured filter",
             "2. Process ALL tickets first (triage each one)",
             "3. Show ONE consolidated table with ALL tickets",
             "4. Include issue summary column for context",

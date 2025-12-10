@@ -138,11 +138,6 @@ class JiraTools(Toolkit):
 
         self._jira_client: JIRA | None = None
 
-        # Simple time-based cache for count queries (reduces rate limiting)
-        # Cache format: {cache_key: (result, timestamp)}
-        self._count_cache: dict[str, tuple[int, float]] = {}
-        self._cache_ttl = 120  # 2 minutes TTL for count queries
-
         tools: list[Any] = []
         if get_issue:
             tools.append(self.get_issue)
@@ -189,36 +184,6 @@ class JiraTools(Toolkit):
             error_msg = f"Failed to connect to Jira: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
-
-    def _get_cached_count(self, jql_query: str) -> int | None:
-        """Get count from cache if still valid.
-
-        Args:
-            jql_query: JQL query string
-
-        Returns:
-            Cached count if valid, None if expired or not cached
-        """
-        if jql_query in self._count_cache:
-            count, timestamp = self._count_cache[jql_query]
-            if time.time() - timestamp < self._cache_ttl:
-                logger.debug(f"Cache hit for JQL: {jql_query[:50]}... (count: {count})")
-                return count
-            else:
-                # Expired, remove from cache
-                del self._count_cache[jql_query]
-                logger.debug(f"Cache expired for JQL: {jql_query[:50]}...")
-        return None
-
-    def _cache_count(self, jql_query: str, count: int) -> None:
-        """Store count in cache with current timestamp.
-
-        Args:
-            jql_query: JQL query string
-            count: Count result to cache
-        """
-        self._count_cache[jql_query] = (count, time.time())
-        logger.debug(f"Cached count for JQL: {jql_query[:50]}... (count: {count})")
 
     def _get_jira_client(self) -> JIRA:
         """Get or create JIRA client instance using stored credentials."""
@@ -700,13 +665,19 @@ class JiraTools(Toolkit):
 
             # First, get total count with maxResults=0 for accurate summary
             logger.debug("Getting total count for summary")
-            count_result = jira.search_issues(jql_query, maxResults=0)
-            total_count = count_result.total
-            logger.debug(f"Total issues matching query: {total_count}")
+            start_time = time.time()
+            # Use json_result=True to avoid fetching all issues (30x faster!)
+            count_result = jira.search_issues(jql_query, maxResults=0, json_result=True)
+            total_count = count_result.get("total", 0)
+            elapsed = time.time() - start_time
+            logger.info(f"Count query completed in {elapsed:.2f}s - Total: {total_count}")
 
             # Now fetch the actual issues up to max_results
-            logger.debug("Executing JQL search with expanded fields")
+            logger.info(f"Fetching {max_results} issues with expanded fields (changelog)")
+            start_time = time.time()
             issues = jira.search_issues(jql_query, maxResults=max_results, expand="renderedFields,changelog")
+            elapsed = time.time() - start_time
+            logger.info(f"Issue fetch completed in {elapsed:.2f}s - Retrieved: {len(issues)} issues")
 
             logger.debug(f"Found {len(issues)} issues in current page (total: {total_count})")
 
@@ -1040,14 +1011,18 @@ class JiraTools(Toolkit):
             # Base JQL query for the release
             base_jql = f'project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "{release_version}" AND status != closed'
 
-            # Get total count for the release (check cache first)
+            # Get total count for the release
             logger.debug(f"Getting total count for release {release_version}")
-            total_count = self._get_cached_count(base_jql)
-            if total_count is None:
-                total_result = jira.search_issues(base_jql, maxResults=0)
-                total_count = total_result.total
-                self._cache_count(base_jql, total_count)
-            logger.debug(f"Total issues: {total_count}")
+            start_time = time.time()
+
+            # CRITICAL: Use json_result=True to avoid fetching all issues!
+            # When json_result=False (default), the library ignores maxResults=0 and fetches ALL issues
+            logger.info(f"Querying Jira for total count: {base_jql[:100]}...")
+            total_result = jira.search_issues(base_jql, maxResults=0, json_result=True)
+
+            elapsed = time.time() - start_time
+            total_count = total_result.get("total", 0)
+            logger.info(f"Jira API call completed in {elapsed:.2f}s - Total count: {total_count}")
 
             # Get count for each team in PARALLEL for better performance
             team_counts = {}
@@ -1056,20 +1031,20 @@ class JiraTools(Toolkit):
                 """Query count for a single team (used in parallel execution)."""
                 team_jql = f"{base_jql} AND team = {team_id}"
 
-                # Check cache first
-                cached_count = self._get_cached_count(team_jql)
-                if cached_count is not None:
-                    return team_id, cached_count
+                # Query Jira for team count (use json_result=True to avoid fetching all issues)
+                logger.info(f"Querying team {team_id}: {team_jql[:100]}...")
+                start_time = time.time()
 
-                # Cache miss - query Jira
-                logger.debug(f"Querying team {team_id}: {team_jql}")
-                team_result = jira.search_issues(team_jql, maxResults=0)
-                team_count = team_result.total
-                self._cache_count(team_jql, team_count)
-                logger.debug(f"Team {team_id}: {team_count} issues")
+                team_result = jira.search_issues(team_jql, maxResults=0, json_result=True)
+
+                elapsed = time.time() - start_time
+                team_count = team_result.get("total", 0)
+                logger.info(f"Jira API call for team {team_id} completed in {elapsed:.2f}s - Count: {team_count}")
                 return team_id, team_count
 
             # Execute queries in parallel (max 10 concurrent to avoid overwhelming Jira)
+            logger.info(f"Starting parallel queries for {len(team_ids)} teams (max 10 concurrent)")
+            parallel_start = time.time()
             with ThreadPoolExecutor(max_workers=10) as executor:
                 # Submit all team queries
                 future_to_team = {executor.submit(query_team_count, tid): tid for tid in team_ids}
@@ -1078,6 +1053,8 @@ class JiraTools(Toolkit):
                 for future in as_completed(future_to_team):
                     team_id, count = future.result()
                     team_counts[team_id] = count
+            parallel_elapsed = time.time() - parallel_start
+            logger.info(f"Parallel queries completed in {parallel_elapsed:.2f}s for {len(team_ids)} teams")
 
             # Calculate issues without team assignment
             assigned_count = sum(team_counts.values())
@@ -1133,17 +1110,24 @@ class JiraTools(Toolkit):
             jql_stories_tasks_closed = f"Sprint = {sprint_id} AND resolution = done AND type in (Story, Task)"
             jql_bugs_closed = f"Sprint = {sprint_id} AND resolution = done AND type = Bug"
 
-            total_planned_results = jira.search_issues(jql_total_planned, maxResults=0)
-            total_planned = total_planned_results.total
+            logger.info(f"Fetching sprint metrics for sprint {sprint_id} (4 queries)")
+            metrics_start = time.time()
 
-            total_closed_results = jira.search_issues(jql_total_closed, maxResults=0)
-            total_closed = total_closed_results.total
+            # Use json_result=True for all count queries (30x faster!)
+            total_planned_results = jira.search_issues(jql_total_planned, maxResults=0, json_result=True)
+            total_planned = total_planned_results.get("total", 0)
 
-            stories_tasks_results = jira.search_issues(jql_stories_tasks_closed, maxResults=0)
-            stories_tasks_closed = stories_tasks_results.total
+            total_closed_results = jira.search_issues(jql_total_closed, maxResults=0, json_result=True)
+            total_closed = total_closed_results.get("total", 0)
 
-            bugs_results = jira.search_issues(jql_bugs_closed, maxResults=0)
-            bugs_closed = bugs_results.total
+            stories_tasks_results = jira.search_issues(jql_stories_tasks_closed, maxResults=0, json_result=True)
+            stories_tasks_closed = stories_tasks_results.get("total", 0)
+
+            bugs_results = jira.search_issues(jql_bugs_closed, maxResults=0, json_result=True)
+            bugs_closed = bugs_results.get("total", 0)
+
+            metrics_elapsed = time.time() - metrics_start
+            logger.info(f"Sprint metrics queries completed in {metrics_elapsed:.2f}s")
 
             result = {
                 "sprint_id": sprint_id,

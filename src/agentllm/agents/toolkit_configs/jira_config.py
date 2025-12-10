@@ -56,6 +56,7 @@ class JiraConfig(BaseToolkitConfig):
     def __init__(
         self,
         jira_server: str = "https://issues.redhat.com",
+        default_project_filter: str = "",
         token_storage=None,
         # Tool enablement flags (defaults: all read tools enabled, write tools disabled)
         get_issue: bool = True,
@@ -74,6 +75,8 @@ class JiraConfig(BaseToolkitConfig):
 
         Args:
             jira_server: JIRA server URL
+            default_project_filter: Default JQL project filter (e.g., "project IN (FOO, BAR)")
+                Applied to queries that need project scoping. Empty string means no filter.
             token_storage: TokenStorage instance for database-backed credentials
             get_issue: Enable get_issue tool (default: True)
             get_issues_detailed: Enable get_issues_detailed tool (default: True)
@@ -89,6 +92,7 @@ class JiraConfig(BaseToolkitConfig):
         """
         super().__init__(token_storage)
         self._jira_server = jira_server
+        self._default_project_filter = default_project_filter
 
         # Store tool configuration
         self._tool_config = {
@@ -163,6 +167,7 @@ class JiraConfig(BaseToolkitConfig):
             toolkit = JiraTools(
                 token=token,
                 server_url=self._jira_server,
+                default_project_filter=self._default_project_filter,
                 **self._tool_config,
             )
 
@@ -258,6 +263,7 @@ class JiraConfig(BaseToolkitConfig):
                     token=token_data["token"],
                     server_url=token_data["server_url"],
                     username=token_data.get("username"),
+                    default_project_filter=self._default_project_filter,
                     **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit from database for user {user_id}")
@@ -271,6 +277,7 @@ class JiraConfig(BaseToolkitConfig):
                 toolkit = JiraTools(
                     token=token,
                     server_url=self._jira_server,
+                    default_project_filter=self._default_project_filter,
                     **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit (legacy) for user {user_id}")

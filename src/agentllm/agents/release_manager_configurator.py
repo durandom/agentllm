@@ -91,17 +91,13 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
 
-        # Configure Jira with all tools enabled (default behavior)
-        # To customize tools, pass specific flags:
-        # jira_config = JiraConfig(
-        #     token_storage=self._token_storage,
-        #     get_fix_versions=True,      # For finding release versions
-        #     get_issues_stats=True,       # For statistics/breakdowns
-        #     get_issues_summary=True,     # For listing issues
-        #     get_issues_detailed=False,   # Disable if not needed
-        #     update_issue=True,           # Enable if agent needs to update
-        # )
-        jira_config = JiraConfig(token_storage=self._token_storage)
+        # Configure Jira with Release Manager specific project filter
+        # The default_project_filter is applied to queries that need project scoping
+        # (like get_issues_by_team) to scope to RHDH projects only
+        jira_config = JiraConfig(
+            token_storage=self._token_storage,
+            default_project_filter="project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP)",
+        )
         system_prompt_config = SystemPromptExtensionConfig(
             gdrive_config=gdrive_config,
             env_var_name="RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL",

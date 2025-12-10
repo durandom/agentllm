@@ -100,6 +100,7 @@ class JiraTools(Toolkit):
         token: str,
         server_url: str,
         username: str | None = None,
+        default_project_filter: str = "",
         get_issue: bool = True,
         get_issues_detailed: bool = True,
         get_issues_stats: bool = True,
@@ -119,6 +120,8 @@ class JiraTools(Toolkit):
             token: Jira personal access token
             server_url: Jira server URL
             username: Optional username for basic auth
+            default_project_filter: Default JQL project filter (e.g., "project IN (FOO, BAR)")
+                Applied to queries that need project scoping. Empty string means no filter.
             get_issue: Include get_issue tool (default: True)
             get_issues_detailed: Include get_issues_detailed tool (default: True)
             get_issues_stats: Include get_issues_stats tool (default: True)
@@ -135,6 +138,7 @@ class JiraTools(Toolkit):
         self._token = token
         self._server_url = server_url
         self._username = username
+        self._default_project_filter = default_project_filter
 
         self._jira_client: JIRA | None = None
 
@@ -1008,8 +1012,13 @@ class JiraTools(Toolkit):
 
             jira = self._get_jira_client()
 
-            # Base JQL query for the release
-            base_jql = f'project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "{release_version}" AND status != closed'
+            # Build base JQL query with optional project filter
+            jql_parts = []
+            if self._default_project_filter:
+                jql_parts.append(self._default_project_filter)
+            jql_parts.append(f'fixVersion = "{release_version}"')
+            jql_parts.append("status != closed")
+            base_jql = " AND ".join(jql_parts)
 
             # Get total count for the release
             logger.debug(f"Getting total count for release {release_version}")
@@ -1029,18 +1038,23 @@ class JiraTools(Toolkit):
 
             def query_team_count(team_id: str) -> tuple[str, int]:
                 """Query count for a single team (used in parallel execution)."""
-                team_jql = f"{base_jql} AND team = {team_id}"
+                try:
+                    team_jql = f"{base_jql} AND team = {team_id}"
 
-                # Query Jira for team count (use json_result=True to avoid fetching all issues)
-                logger.info(f"Querying team {team_id}: {team_jql[:100]}...")
-                start_time = time.time()
+                    # Query Jira for team count (use json_result=True to avoid fetching all issues)
+                    logger.info(f"Querying team {team_id}: {team_jql[:100]}...")
+                    start_time = time.time()
 
-                team_result = jira.search_issues(team_jql, maxResults=0, json_result=True)
+                    team_result = jira.search_issues(team_jql, maxResults=0, json_result=True)
 
-                elapsed = time.time() - start_time
-                team_count = team_result.get("total", 0)
-                logger.info(f"Jira API call for team {team_id} completed in {elapsed:.2f}s - Count: {team_count}")
-                return team_id, team_count
+                    elapsed = time.time() - start_time
+                    team_count = team_result.get("total", 0)
+                    logger.info(f"Jira API call for team {team_id} completed in {elapsed:.2f}s - Count: {team_count}")
+                    return team_id, team_count
+                except Exception as e:
+                    logger.error(f"Failed to query team {team_id}: {e}")
+                    # Return 0 count on error instead of failing entire operation
+                    return team_id, 0
 
             # Execute queries in parallel (max 10 concurrent to avoid overwhelming Jira)
             logger.info(f"Starting parallel queries for {len(team_ids)} teams (max 10 concurrent)")

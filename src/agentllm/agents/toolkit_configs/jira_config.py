@@ -63,6 +63,7 @@ class JiraConfig(BaseToolkitConfig):
         get_issues_stats: bool = True,
         get_issues_summary: bool = True,
         get_fix_versions: bool = True,
+        get_issues_by_team: bool = True,
         add_comment: bool = False,
         create_issue: bool = False,
         extract_sprint_info: bool = True,
@@ -79,6 +80,7 @@ class JiraConfig(BaseToolkitConfig):
             get_issues_stats: Enable get_issues_stats tool (default: True)
             get_issues_summary: Enable get_issues_summary tool (default: True)
             get_fix_versions: Enable get_fix_versions tool (default: True)
+            get_issues_by_team: Enable get_issues_by_team tool (default: True)
             add_comment: Enable add_comment tool (default: False)
             create_issue: Enable create_issue tool (default: False)
             extract_sprint_info: Enable extract_sprint_info tool (default: True)
@@ -95,6 +97,7 @@ class JiraConfig(BaseToolkitConfig):
             "get_issues_stats": get_issues_stats,
             "get_issues_summary": get_issues_summary,
             "get_fix_versions": get_fix_versions,
+            "get_issues_by_team": get_issues_by_team,
             "add_comment": add_comment,
             "create_issue": create_issue,
             "extract_sprint_info": extract_sprint_info,

@@ -11,18 +11,33 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from agno.db.sqlite import SqliteDb
 from dotenv import load_dotenv
+
+# Load .env.secrets file FIRST before importing agentllm modules
+# This ensures AGENTLLM_TOKEN_ENCRYPTION_KEY is available for TokenStorage initialization
+# Use override=True to ensure .env.secrets takes precedence over any previously loaded .env
+load_dotenv(".env.secrets", override=True)
+
+# Now import agentllm modules (after environment is loaded)
+# ruff: noqa: E402 - Imports must come after load_dotenv() for encryption key
+from agno.db.sqlite import SqliteDb
 
 from agentllm.agents.release_manager import ReleaseManager
 from agentllm.db import TokenStorage
 
-# Load .env.secrets file for tests (contains API keys and tokens)
-load_dotenv(".env.secrets")
-
 # Map GEMINI_API_KEY to GOOGLE_API_KEY if needed
 if "GOOGLE_API_KEY" not in os.environ and "GEMINI_API_KEY" in os.environ:
     os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+
+# Verify encryption key is loaded (required for token decryption)
+if not os.getenv("AGENTLLM_TOKEN_ENCRYPTION_KEY"):
+    raise RuntimeError(
+        "AGENTLLM_TOKEN_ENCRYPTION_KEY not set in environment. "
+        "This is required to decrypt tokens from the production database. "
+        "Make sure .env.secrets has AGENTLLM_TOKEN_ENCRYPTION_KEY set to the same key "
+        "used by the running 'just dev' instance. "
+        'Generate a new key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+    )
 
 
 # Test scenarios with validation criteria
@@ -545,3 +560,352 @@ class TestReleaseManagerScenarios:
 
         success_rate = (passed + partial) / total * 100
         assert success_rate >= 80, f"Success rate too low: {success_rate:.1f}%"
+
+
+@pytest.mark.integration
+class TestJiraOptimizations:
+    """Tests for Jira API optimizations (caching, parallel queries, get_issues_by_team).
+
+    These tests validate that our optimizations work correctly and improve performance
+    while maintaining accuracy.
+
+    Run with: pytest tests/test_release_manager_scenarios.py::TestJiraOptimizations -v -s -m integration
+    """
+
+    @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
+    def test_get_issues_by_team_tool(self, configured_agent, configured_user_id):
+        """Test the new get_issues_by_team() tool for accurate team breakdowns.
+
+        This test validates:
+        1. Tool executes without errors
+        2. Returns correct structure with total_issues, by_team, without_team
+        3. Math is correct: sum(by_team) + without_team = total_issues
+        4. Results are accurate (not sample-based)
+        """
+        print("\n" + "=" * 80)
+        print("🧪 TEST: get_issues_by_team() Tool")
+        print("=" * 80)
+
+        # Access the configurator from the agent wrapper
+        configurator = configured_agent._configurator
+
+        # Find the JiraConfig
+        jira_config = None
+        for config in configurator.toolkit_configs:
+            if config.__class__.__name__ == "JiraConfig":
+                jira_config = config
+                break
+
+        assert jira_config is not None, "JiraConfig not found in configurator"
+
+        # Get the Jira toolkit for this user
+        jira_toolkit = jira_config.get_toolkit(configured_user_id)
+        assert jira_toolkit is not None, "Could not get Jira toolkit"
+
+        # Test with a known release version
+        release_version = "1.9.0"
+
+        # Get active team IDs from typical RHDH teams
+        # These team IDs are from the RHDH Team spreadsheet
+        team_ids = [
+            "4267",  # Frontend Plugin & UI
+            "4564",  # COPE
+            "5775",  # AI
+            "4265",  # Install
+            "4558",  # Plugins
+        ]
+
+        print(f"\n📋 Testing with release: {release_version}")
+        print(f"📋 Testing with {len(team_ids)} teams: {team_ids}")
+
+        # Call the tool
+        import time
+
+        start_time = time.time()
+        result_json = jira_toolkit.get_issues_by_team(release_version, team_ids)
+        elapsed = time.time() - start_time
+
+        print(f"\n⏱️  Execution time: {elapsed:.2f} seconds")
+
+        # Parse the result
+        result = json.loads(result_json)
+
+        print("\n📊 Results:")
+        print(f"  Total issues: {result.get('total_issues')}")
+        print(f"  Issues by team: {result.get('by_team')}")
+        print(f"  Issues without team: {result.get('without_team')}")
+
+        # Validation
+        assert "error" not in result, f"Tool returned error: {result.get('error')}"
+        assert "total_issues" in result, "Missing total_issues in result"
+        assert "by_team" in result, "Missing by_team in result"
+        assert "without_team" in result, "Missing without_team in result"
+
+        total_issues = result["total_issues"]
+        by_team = result["by_team"]
+        without_team = result["without_team"]
+
+        # Verify math
+        assigned_count = sum(by_team.values())
+        calculated_total = assigned_count + without_team
+
+        print("\n🔍 Validation:")
+        print(f"  Assigned issues: {assigned_count}")
+        print(f"  Unassigned issues: {without_team}")
+        print(f"  Calculated total: {calculated_total}")
+        print(f"  Reported total: {total_issues}")
+
+        assert calculated_total == total_issues, f"Math error: {assigned_count} + {without_team} != {total_issues}"
+        print("  ✅ Math is correct!")
+
+        # Verify all team IDs are present
+        for team_id in team_ids:
+            assert team_id in by_team, f"Team {team_id} missing from results"
+
+        print("\n✅ TEST PASSED")
+        print("=" * 80)
+
+    @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
+    def test_jira_count_caching(self, configured_agent, configured_user_id):
+        """Test that Jira count caching works correctly.
+
+        This test validates:
+        1. First query hits Jira (cache miss)
+        2. Second identical query uses cache (cache hit)
+        3. Cache expires after TTL
+        4. Cached results are accurate
+        """
+        print("\n" + "=" * 80)
+        print("🧪 TEST: Jira Count Caching")
+        print("=" * 80)
+
+        # Access the Jira toolkit
+        configurator = configured_agent._configurator
+        jira_config = None
+        for config in configurator.toolkit_configs:
+            if config.__class__.__name__ == "JiraConfig":
+                jira_config = config
+                break
+
+        assert jira_config is not None, "JiraConfig not found"
+        jira_toolkit = jira_config.get_toolkit(configured_user_id)
+        assert jira_toolkit is not None, "Could not get Jira toolkit"
+
+        # Test query
+        jql_query = 'project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "1.9.0" AND status != closed'
+
+        print(f"\n📋 Test JQL: {jql_query[:60]}...")
+
+        # Clear cache to start fresh
+        jira_toolkit._count_cache.clear()
+
+        # First query - should be a cache miss
+        print("\n1️⃣  First query (cache miss expected):")
+        import time
+
+        start_time = time.time()
+        count1 = jira_toolkit._get_cached_count(jql_query)
+        assert count1 is None, "Cache should be empty initially"
+
+        # Actually query Jira
+        jira_client = jira_toolkit._get_jira_client()
+        result = jira_client.search_issues(jql_query, maxResults=0)
+        actual_count = result.total
+        jira_toolkit._cache_count(jql_query, actual_count)
+        elapsed1 = time.time() - start_time
+
+        print(f"  Count: {actual_count}")
+        print(f"  Time: {elapsed1:.3f}s")
+        print("  ✅ Cache miss - queried Jira")
+
+        # Second query - should be a cache hit
+        print("\n2️⃣  Second query (cache hit expected):")
+        start_time = time.time()
+        count2 = jira_toolkit._get_cached_count(jql_query)
+        elapsed2 = time.time() - start_time
+
+        assert count2 is not None, "Cache should have the result"
+        assert count2 == actual_count, f"Cached count {count2} != actual {actual_count}"
+        print(f"  Count: {count2}")
+        print(f"  Time: {elapsed2:.3f}s")
+        print(f"  Speedup: {elapsed1 / elapsed2:.1f}x faster")
+        print("  ✅ Cache hit - used cached value")
+
+        # Verify cache hit was significantly faster
+        assert elapsed2 < elapsed1 / 10, "Cache hit should be much faster than API call"
+
+        # Test cache expiration (without waiting 2 minutes)
+        print("\n3️⃣  Cache expiration test:")
+        # Manually set timestamp to simulate expiration
+        old_timestamp = time.time() - 130  # 130 seconds ago (TTL is 120)
+        jira_toolkit._count_cache[jql_query] = (actual_count, old_timestamp)
+
+        count3 = jira_toolkit._get_cached_count(jql_query)
+        assert count3 is None, "Cache should be expired"
+        print("  ✅ Cache expired correctly after TTL")
+
+        print("\n✅ TEST PASSED")
+        print("=" * 80)
+
+    @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
+    def test_parallel_team_queries_performance(self, configured_agent, configured_user_id):
+        """Test that parallel team queries are faster than sequential.
+
+        This test validates:
+        1. Parallel execution completes faster than sequential would
+        2. All team counts are returned correctly
+        3. No data corruption from concurrent access
+        """
+        print("\n" + "=" * 80)
+        print("🧪 TEST: Parallel Team Query Performance")
+        print("=" * 80)
+
+        # Access the Jira toolkit
+        configurator = configured_agent._configurator
+        jira_config = None
+        for config in configurator.toolkit_configs:
+            if config.__class__.__name__ == "JiraConfig":
+                jira_config = config
+                break
+
+        assert jira_config is not None, "JiraConfig not found"
+        jira_toolkit = jira_config.get_toolkit(configured_user_id)
+        assert jira_toolkit is not None, "Could not get Jira toolkit"
+
+        # Clear cache to ensure we're testing actual queries
+        jira_toolkit._count_cache.clear()
+
+        # Test with multiple teams
+        release_version = "1.9.0"
+        team_ids = [
+            "4267",  # Frontend Plugin & UI
+            "4564",  # COPE
+            "5775",  # AI
+            "4265",  # Install
+            "4558",  # Plugins
+            "4869",  # Security
+        ]
+
+        print(f"\n📋 Testing parallel queries for {len(team_ids)} teams")
+
+        # Execute the parallel team query
+        import time
+
+        start_time = time.time()
+        result_json = jira_toolkit.get_issues_by_team(release_version, team_ids)
+        elapsed_parallel = time.time() - start_time
+
+        result = json.loads(result_json)
+
+        print(f"\n⏱️  Parallel execution time: {elapsed_parallel:.2f}s")
+        print(f"📊 Results: {result.get('by_team')}")
+
+        # Validation
+        assert "error" not in result, f"Tool returned error: {result.get('error')}"
+        assert len(result["by_team"]) == len(team_ids), "Not all teams returned"
+
+        # Verify all team IDs are present and have counts
+        for team_id in team_ids:
+            assert team_id in result["by_team"], f"Team {team_id} missing"
+            assert isinstance(result["by_team"][team_id], int), f"Team {team_id} count is not an integer"
+
+        # Estimate sequential time (1 API call = ~0.5-1 second typically)
+        # With 6 teams + 1 total query = 7 queries
+        estimated_sequential_time = 7 * 0.5  # Conservative estimate
+
+        print("\n🔍 Performance Analysis:")
+        print(f"  Parallel time: {elapsed_parallel:.2f}s")
+        print(f"  Estimated sequential time: {estimated_sequential_time:.2f}s")
+        print(f"  Speedup: {estimated_sequential_time / elapsed_parallel:.1f}x")
+
+        # Parallel should be significantly faster (allowing for some overhead)
+        # We expect at least 2x improvement with 6 teams
+        assert elapsed_parallel < estimated_sequential_time, "Parallel execution should be faster than sequential"
+        print("  ✅ Parallel execution is faster!")
+
+        print("\n✅ TEST PASSED")
+        print("=" * 80)
+
+    @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
+    def test_team_breakdown_accuracy(self, configured_agent, configured_user_id):
+        """Test that team breakdown counts match individual team queries.
+
+        This validates the fix for the original pagination bug where team counts
+        were calculated from a sample of 50 issues instead of all issues.
+
+        This test:
+        1. Gets team breakdown using get_issues_by_team()
+        2. Queries each team individually to verify counts
+        3. Ensures no sampling artifacts
+        """
+        print("\n" + "=" * 80)
+        print("🧪 TEST: Team Breakdown Accuracy (Pagination Bug Fix)")
+        print("=" * 80)
+
+        # Access the Jira toolkit
+        configurator = configured_agent._configurator
+        jira_config = None
+        for config in configurator.toolkit_configs:
+            if config.__class__.__name__ == "JiraConfig":
+                jira_config = config
+                break
+
+        assert jira_config is not None, "JiraConfig not found"
+        jira_toolkit = jira_config.get_toolkit(configured_user_id)
+        assert jira_toolkit is not None, "Could not get Jira toolkit"
+
+        # Clear cache to ensure fresh queries
+        jira_toolkit._count_cache.clear()
+
+        release_version = "1.9.0"
+        test_teams = {
+            "4564": "COPE",  # Should be 98, not 11
+            "4267": "Frontend Plugin & UI",  # Should be 100
+        }
+
+        print(f"\n📋 Testing team breakdown for release {release_version}")
+        print(f"📋 Teams to verify: {list(test_teams.values())}")
+
+        # Get breakdown using the new tool
+        team_ids = list(test_teams.keys())
+        result_json = jira_toolkit.get_issues_by_team(release_version, team_ids)
+        result = json.loads(result_json)
+
+        assert "error" not in result, f"Tool returned error: {result.get('error')}"
+
+        print("\n📊 Team Breakdown Results:")
+        for team_id, team_name in test_teams.items():
+            count = result["by_team"].get(team_id, 0)
+            print(f"  {team_name} ({team_id}): {count} issues")
+
+        # Verify against individual queries
+        print("\n🔍 Verifying with individual queries:")
+        jira_client = jira_toolkit._get_jira_client()
+        base_jql = f'project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "{release_version}" AND status != closed'
+
+        for team_id, team_name in test_teams.items():
+            team_jql = f"{base_jql} AND team = {team_id}"
+            individual_result = jira_client.search_issues(team_jql, maxResults=0)
+            individual_count = individual_result.total
+
+            breakdown_count = result["by_team"][team_id]
+
+            print(f"  {team_name}:")
+            print(f"    get_issues_by_team(): {breakdown_count}")
+            print(f"    Individual query:     {individual_count}")
+
+            assert breakdown_count == individual_count, (
+                f"Count mismatch for {team_name}: breakdown={breakdown_count}, individual={individual_count}"
+            )
+            print("    ✅ Counts match!")
+
+        # Verify no sampling artifacts (counts should not be suspiciously low like 11 when actual is 98)
+        for team_id in test_teams:
+            count = result["by_team"][team_id]
+            # Teams should have reasonable counts (not sampling artifacts like 1, 1, 1, 10)
+            # If total issues > 500, individual teams should have > 10 issues typically
+            if result["total_issues"] > 500:
+                assert count > 10 or count == 0, f"Suspiciously low count ({count}) for team {team_id} suggests sampling bug"
+
+        print("\n✅ TEST PASSED - No pagination bugs detected!")
+        print("=" * 80)

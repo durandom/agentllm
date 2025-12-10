@@ -4,6 +4,8 @@ Jira toolkit for interacting with Jira issues and projects.
 
 import json
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from agno.tools import Toolkit
@@ -103,6 +105,7 @@ class JiraTools(Toolkit):
         get_issues_stats: bool = True,
         get_issues_summary: bool = True,
         get_fix_versions: bool = True,
+        get_issues_by_team: bool = True,
         add_comment: bool = False,
         create_issue: bool = False,
         extract_sprint_info: bool = True,
@@ -121,6 +124,7 @@ class JiraTools(Toolkit):
             get_issues_stats: Include get_issues_stats tool (default: True)
             get_issues_summary: Include get_issues_summary tool (default: True)
             get_fix_versions: Include get_fix_versions tool (default: True)
+            get_issues_by_team: Include get_issues_by_team tool (default: True)
             add_comment: Include add_comment tool (default: False)
             create_issue: Include create_issue tool (default: False)
             extract_sprint_info: Include extract_sprint_info tool (default: True)
@@ -134,6 +138,11 @@ class JiraTools(Toolkit):
 
         self._jira_client: JIRA | None = None
 
+        # Simple time-based cache for count queries (reduces rate limiting)
+        # Cache format: {cache_key: (result, timestamp)}
+        self._count_cache: dict[str, tuple[int, float]] = {}
+        self._cache_ttl = 120  # 2 minutes TTL for count queries
+
         tools: list[Any] = []
         if get_issue:
             tools.append(self.get_issue)
@@ -145,6 +154,8 @@ class JiraTools(Toolkit):
             tools.append(self.get_fix_versions)
         if get_issues_detailed:
             tools.append(self.get_issues_detailed)
+        if get_issues_by_team:
+            tools.append(self.get_issues_by_team)
         if add_comment:
             tools.append(self.add_comment)
         if create_issue:
@@ -178,6 +189,36 @@ class JiraTools(Toolkit):
             error_msg = f"Failed to connect to Jira: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
+
+    def _get_cached_count(self, jql_query: str) -> int | None:
+        """Get count from cache if still valid.
+
+        Args:
+            jql_query: JQL query string
+
+        Returns:
+            Cached count if valid, None if expired or not cached
+        """
+        if jql_query in self._count_cache:
+            count, timestamp = self._count_cache[jql_query]
+            if time.time() - timestamp < self._cache_ttl:
+                logger.debug(f"Cache hit for JQL: {jql_query[:50]}... (count: {count})")
+                return count
+            else:
+                # Expired, remove from cache
+                del self._count_cache[jql_query]
+                logger.debug(f"Cache expired for JQL: {jql_query[:50]}...")
+        return None
+
+    def _cache_count(self, jql_query: str, count: int) -> None:
+        """Store count in cache with current timestamp.
+
+        Args:
+            jql_query: JQL query string
+            count: Count result to cache
+        """
+        self._count_cache[jql_query] = (count, time.time())
+        logger.debug(f"Cached count for JQL: {jql_query[:50]}... (count: {count})")
 
     def _get_jira_client(self) -> JIRA:
         """Get or create JIRA client instance using stored credentials."""
@@ -465,18 +506,21 @@ class JiraTools(Toolkit):
         This is a lightweight tool optimized for statistics - it returns ONLY metadata,
         no issue details. Use this when you need counts and breakdowns without listing issues.
 
-        Note: Fetches up to 100 issues to calculate accurate breakdowns. For queries with
-        more results, breakdowns are based on a sample. Total count is always accurate.
+        **IMPORTANT**:
+        - `total_count` is ALWAYS accurate (no sampling)
+        - Breakdowns (`by_type`, `by_status`, `by_priority`) are based on a SAMPLE of up to 100 issues
+        - If total > 100, the breakdowns are approximate proportions, not exact counts
+        - For accurate team-based counts, use `get_issues_by_team()` instead
 
         Args:
             jql_query: JQL query string to count issues
 
         Returns:
             JSON string containing ONLY summary metadata:
-            - total_count: Total number of matching issues (always accurate)
-            - by_type: Count breakdown by issue type (based on sample if total > 100)
-            - by_status: Count breakdown by status (based on sample if total > 100)
-            - by_priority: Count breakdown by priority (based on sample if total > 100)
+            - total_count: Total number of matching issues (ALWAYS ACCURATE)
+            - by_type: Count breakdown by issue type (SAMPLE-BASED if total > 100)
+            - by_status: Count breakdown by status (SAMPLE-BASED if total > 100)
+            - by_priority: Count breakdown by priority (SAMPLE-BASED if total > 100)
             - query: The JQL query that was executed
 
         Example response:
@@ -581,14 +625,18 @@ class JiraTools(Toolkit):
         This is optimized for listing issues when you don't need full details.
         Includes summary metadata for context. Use this for "Show me...", "List..." queries.
 
+        **PAGINATION WARNING**: Returns at most `max_results` issues (default: 50).
+        Check `summary.has_more` and use `summary.total_count` for accurate totals.
+        For team-based breakdowns, use `get_issues_by_team()` instead.
+
         Args:
             jql_query: JQL query string to search for issues
-            max_results: Maximum number of results to return (default: 50)
+            max_results: Maximum number of results to return (default: 50, max: 1000)
 
         Returns:
             JSON string containing:
-            - summary: Metadata (total_count, breakdowns)
-            - issues: List with only key, summary, status fields
+            - summary: Metadata (total_count is always accurate, breakdowns are sample-based)
+            - issues: List with only key, summary, status fields (up to max_results)
             - query: The JQL query that was executed
         """
         return self.get_issues_detailed(
@@ -607,6 +655,16 @@ class JiraTools(Toolkit):
     ) -> str:
         """Get detailed Jira issue information using a JQL query with custom field selection.
 
+        **PAGINATION WARNING**: This tool returns at most `max_results` issues (default: 50).
+        Check `summary.has_more` to see if there are more results. The `summary.total_count`
+        always shows the accurate total, but `issues` array and breakdown stats (`by_type`,
+        `by_status`, `by_priority`) are based on the returned sample only.
+
+        **For accurate counts across all issues**, use:
+        - `get_issues_stats()` - Get total count with breakdowns
+        - `get_issues_by_team()` - Get accurate team breakdown without pagination
+        - Increase `max_results` (up to 1000) if you need more issues
+
         Args:
             jql_query: JQL query string to search for issues
             fields: Comma-separated list of fields to return. Available fields:
@@ -616,14 +674,18 @@ class JiraTools(Toolkit):
                    - target_version, product_manager, epic_link, pr_data,
                      release_note_text, release_note_status (custom fields)
                    Default: "key,summary,status,type,assignee,priority,components,labels"
-            max_results: Maximum number of results to return (default: 50)
+            max_results: Maximum number of results to return (default: 50, max: 1000)
             include_summary: Include summary metadata (total count, breakdown by status/type/priority).
                            Default: True
 
         Returns:
             JSON string containing:
             - summary: Metadata about the search results (if include_summary=True)
-            - issues: List of matching issues with requested fields
+              - total_count: Accurate total (always correct regardless of pagination)
+              - returned_count: Number of issues in this response
+              - has_more: True if there are more results beyond max_results
+              - by_type/by_status/by_priority: Breakdowns (sample-based if has_more=true)
+            - issues: List of matching issues with requested fields (up to max_results)
             - query: The JQL query that was executed
         """
         try:
@@ -935,6 +997,110 @@ class JiraTools(Toolkit):
             error_msg = f"Error extracting sprint info from issue {issue_key}: {str(e)}"
             logger.error(error_msg)
             return json.dumps(None)
+
+    def get_issues_by_team(
+        self,
+        release_version: str,
+        team_ids: list[str],
+    ) -> str:
+        """Get accurate issue counts by team for a release without pagination issues.
+
+        This tool runs efficient count queries (maxResults=0) for each team to get
+        accurate counts without fetching all issues. Solves the pagination problem
+        where sampling first 50 issues gives incorrect team distributions.
+
+        Args:
+            release_version: Release version (e.g., "1.9.0")
+            team_ids: List of team IDs to query (e.g., ["4267", "4564", "5775"])
+
+        Returns:
+            JSON string with team breakdown:
+            {
+                "release_version": "1.9.0",
+                "total_issues": 587,
+                "by_team": {
+                    "4267": 100,
+                    "4564": 98,
+                    "5775": 63
+                },
+                "without_team": 326,
+                "query_base": "project IN (...) AND fixVersion = \"1.9.0\" AND status != closed"
+            }
+
+        Example:
+            # Get team IDs from team mapping, then get accurate counts
+            result = get_issues_by_team("1.9.0", ["4267", "4564", "5775"])
+        """
+        try:
+            logger.debug(f"Getting issue counts by team for release {release_version}")
+            logger.debug(f"Team IDs: {team_ids}")
+
+            jira = self._get_jira_client()
+
+            # Base JQL query for the release
+            base_jql = f'project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "{release_version}" AND status != closed'
+
+            # Get total count for the release (check cache first)
+            logger.debug(f"Getting total count for release {release_version}")
+            total_count = self._get_cached_count(base_jql)
+            if total_count is None:
+                total_result = jira.search_issues(base_jql, maxResults=0)
+                total_count = total_result.total
+                self._cache_count(base_jql, total_count)
+            logger.debug(f"Total issues: {total_count}")
+
+            # Get count for each team in PARALLEL for better performance
+            team_counts = {}
+
+            def query_team_count(team_id: str) -> tuple[str, int]:
+                """Query count for a single team (used in parallel execution)."""
+                team_jql = f"{base_jql} AND team = {team_id}"
+
+                # Check cache first
+                cached_count = self._get_cached_count(team_jql)
+                if cached_count is not None:
+                    return team_id, cached_count
+
+                # Cache miss - query Jira
+                logger.debug(f"Querying team {team_id}: {team_jql}")
+                team_result = jira.search_issues(team_jql, maxResults=0)
+                team_count = team_result.total
+                self._cache_count(team_jql, team_count)
+                logger.debug(f"Team {team_id}: {team_count} issues")
+                return team_id, team_count
+
+            # Execute queries in parallel (max 10 concurrent to avoid overwhelming Jira)
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                # Submit all team queries
+                future_to_team = {executor.submit(query_team_count, tid): tid for tid in team_ids}
+
+                # Collect results as they complete
+                for future in as_completed(future_to_team):
+                    team_id, count = future.result()
+                    team_counts[team_id] = count
+
+            # Calculate issues without team assignment
+            assigned_count = sum(team_counts.values())
+            without_team = total_count - assigned_count
+
+            result = {
+                "release_version": release_version,
+                "total_issues": total_count,
+                "by_team": team_counts,
+                "without_team": without_team,
+                "query_base": base_jql,
+            }
+
+            logger.info(
+                f"Team breakdown for {release_version}: {len(team_counts)} teams, {assigned_count} assigned, {without_team} unassigned"
+            )
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error getting issues by team for release {release_version}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
 
     def get_sprint_metrics(self, sprint_id: str) -> str:
         """Calculate sprint metrics by running multiple JQL queries.

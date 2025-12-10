@@ -91,17 +91,13 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
 
-        # Configure Jira with all tools enabled (default behavior)
-        # To customize tools, pass specific flags:
-        # jira_config = JiraConfig(
-        #     token_storage=self._token_storage,
-        #     get_fix_versions=True,      # For finding release versions
-        #     get_issues_stats=True,       # For statistics/breakdowns
-        #     get_issues_summary=True,     # For listing issues
-        #     get_issues_detailed=False,   # Disable if not needed
-        #     update_issue=True,           # Enable if agent needs to update
-        # )
-        jira_config = JiraConfig(token_storage=self._token_storage)
+        # Configure Jira with Release Manager specific project filter
+        # The default_project_filter is applied to queries that need project scoping
+        # (like get_issues_by_team) to scope to RHDH projects only
+        jira_config = JiraConfig(
+            token_storage=self._token_storage,
+            default_project_filter="project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP)",
+        )
         system_prompt_config = SystemPromptExtensionConfig(
             gdrive_config=gdrive_config,
             env_var_name="RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL",
@@ -133,6 +129,23 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             "Available tools:",
             "- Jira: Query and analyze issues, epics, features, bugs, and CVEs",
             "- Google Drive: Access release schedules, test plans, documentation plans, and feature demos",
+            "",
+            "Jira Tool Usage - CRITICAL PAGINATION GUIDANCE:",
+            "- Most Jira tools return SAMPLES of issues (default: 50, max: 1000 per query)",
+            "- ALWAYS check 'summary.total_count' for accurate totals - it's ALWAYS correct",
+            "- The 'summary.has_more' field indicates if there are more results beyond what was returned",
+            "- Breakdown stats ('by_type', 'by_status', 'by_priority') are SAMPLE-BASED when has_more=true",
+            "",
+            "For Team Breakdowns (REQUIRED):",
+            "- DO NOT count teams from get_issues_detailed() or get_issues_summary() results",
+            "- ALWAYS use get_issues_by_team(release_version, team_ids) for accurate team counts",
+            "- This tool runs efficient count-only queries per team (no pagination issues)",
+            "- Workflow: 1) Get team IDs from Google Drive team mapping, 2) Call get_issues_by_team()",
+            "",
+            "When to increase max_results:",
+            "- When displaying issue lists to users (e.g., 'show me blockers'), use max_results=100-1000",
+            "- When you only need counts, use get_issues_stats() or get_issues_by_team() (no issue fetching)",
+            "- When you need ALL issues and total > 1000, you'll need multiple queries with pagination",
             "",
             "Output guidelines:",
             "- Use markdown formatting for all structured output",

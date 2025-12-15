@@ -27,6 +27,7 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         temperature: float | None = None,
         max_tokens: int | None = None,
         agent_kwargs: dict[str, Any] | None = None,
+        system_prompt_local_file: str | None = None,
         **model_kwargs: Any,
     ):
         """Initialize Release Manager configurator.
@@ -39,10 +40,15 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             temperature: Optional model temperature
             max_tokens: Optional max tokens
             agent_kwargs: Additional Agent constructor kwargs
+            system_prompt_local_file: Optional local file path for system prompt.
+                                      If provided, reads from file instead of Google Drive.
+                                      Useful for testing without OAuth.
             **model_kwargs: Additional model parameters
         """
         # Store token_storage for use in _initialize_toolkit_configs
         self._token_storage = token_storage
+        # Store local file path for system prompt extension
+        self._system_prompt_local_file = system_prompt_local_file
 
         # Call parent constructor (will call _initialize_toolkit_configs)
         super().__init__(
@@ -101,6 +107,7 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         system_prompt_config = SystemPromptExtensionConfig(
             gdrive_config=gdrive_config,
             env_var_name="RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL",
+            local_file_path=self._system_prompt_local_file,
             token_storage=self._token_storage,
         )
 

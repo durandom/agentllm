@@ -285,31 +285,14 @@ For example, **1.9.0** is the specific identifier for the 1.9.0 release.
 
 ## Announce Feature Freeze Update
 
-**Purpose:** Generate a Slack message for RHDH Feature Freeze status update.
+**Output:** Slack message announcing Feature Freeze status for a release version
 
-**You'll need:**
-- Release version (e.g., 1.9.0)
+**Data Requirements:**
+1. Feature Freeze date - Check release issue description using `get_issue(RHDHPLAN-XXX)`
+2. Active engineering teams - Use `get_document_content("1vQXfvID72qwqvLb17eyGOvnZXrZG7NBzTGv6RP9wvyM")` ([RHDH Team spreadsheet](https://docs.google.com/spreadsheets/d/1vQXfvID72qwqvLb17eyGOvnZXrZG7NBzTGv6RP9wvyM/edit)), filter Category=Engineering, Status=Active
+3. Team issue counts - Use `get_issues_by_team(release_version, team_ids)` for accurate counts
 
----
-
-### How to Generate This Announcement
-
-📋 **First, gather the data:**
-
-| Step | What to Do | What You'll Get |
-|------|-----------|-----------------|
-| 1 | Run **Retrieve Release Dates** for [RELEASE_VERSION] | Feature Freeze date |
-| 2 | Run **Retrieve Teams and Leads** (filter: Active, Engineering) | List of teams with leads |
-| 3 | For each team, run **Retrieve Issues by Team** with [TEAM_ID] and [RELEASE_VERSION] | Open issue count + Jira link |
-
-▶️ **Then, fill in the template:**
-
----
-
-### Slack Message Template
-
-Copy and post to Slack:
-
+**Template:**
 ```
 :announcement: RHDH [RELEASE_VERSION] [Feature Freeze](https://docs.google.com/document/d/1IjMH985f3XUhXl_6drfUKopLxTBoY0VMJ2Zpr_62K2g/edit?tab=t.0#bookmark=id.5a1n60q199qh) Update :announcement:
 
@@ -321,10 +304,8 @@ Here's what's outstanding for Feature Freeze. Please review and share if there a
 • **[TEAM_NAME]** - [[ISSUE_COUNT]]([JIRA_LINK]) @[LEAD_SLACK]
 (repeat for each active engineering team)
 
-cc [@rhdh-release](https://redhat.enterprise.slack.com/admin/user_groups)
+cc @rhdh-release
 ```
-
-⚠️ **Note:** The dashboard link includes the filter ID. If the dashboard changes, update the link here.
 
 ---
 

@@ -128,7 +128,10 @@ class JiraConfig(BaseToolkitConfig):
                 return True
 
         # Fall back to legacy in-memory storage
-        if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+        if (
+            user_id in self._user_configs
+            and "jira_token" in self._user_configs[user_id]
+        ):
             return True
 
         return False
@@ -175,7 +178,9 @@ class JiraConfig(BaseToolkitConfig):
             success, validation_message = toolkit.validate_connection()
 
             if not success:
-                logger.error(f"Jira token validation failed for user {user_id}: {validation_message}")
+                logger.error(
+                    f"Jira token validation failed for user {user_id}: {validation_message}"
+                )
                 raise ValueError(f"Invalid Jira token: {validation_message}")
 
             logger.info(f"Jira token validated successfully for user {user_id}")
@@ -200,9 +205,7 @@ class JiraConfig(BaseToolkitConfig):
             self._jira_toolkits[user_id] = toolkit
 
             # Return confirmation with validation message
-            return (
-                f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
-            )
+            return f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
 
         except Exception as e:
             logger.error(f"Failed to validate Jira token for user {user_id}: {e}")
@@ -272,7 +275,10 @@ class JiraConfig(BaseToolkitConfig):
                 return None
         else:
             # Use legacy in-memory authentication
-            if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+            if (
+                user_id in self._user_configs
+                and "jira_token" in self._user_configs[user_id]
+            ):
                 token = self._user_configs[user_id]["jira_token"]
                 toolkit = JiraTools(
                     token=token,

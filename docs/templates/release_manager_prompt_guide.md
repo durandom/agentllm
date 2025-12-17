@@ -286,7 +286,7 @@ Before deploying prompt changes, verify:
 3. **Copy content:**
    - Copy ALL content from the template file
    - Paste into your new Google Doc
-   - Keep the markdown formatting
+   - **Keep the markdown formatting as plain text** (see Working with Markdown below)
 
 4. **Customize for your team:**
    - Update Jira project key (`RHDH` → your project)
@@ -299,30 +299,175 @@ Before deploying prompt changes, verify:
    - Set sharing to:
      - "Anyone with the link can view" (if public)
      - Or add specific users/groups (if private)
-   - Copy the document URL
+   - Copy the document URL and share with technical team for configuration
 
-6. **Configure AgentLLM:**
-   - Edit `.env.secrets` file
-   - Set: `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=<your-doc-url>`
-   - Restart services: `nox -s dev_build`
+---
 
-### Verifying Setup
+## Working with Markdown in Google Docs
 
-1. **Start agent:**
-   ```bash
-   nox -s dev_build
-   ```
+**Important:** The agent reads the Google Doc as **plain text**, not formatted text. You must write in Markdown syntax, even though Google Docs displays it as unformatted text.
 
-2. **Check logs for:**
-   ```
-   ✅ Successfully fetched extended system prompt
-   ```
+### What is Markdown?
 
-3. **Test with agent:**
+Markdown is a simple text formatting syntax. Instead of using Google Docs' formatting toolbar, you write special characters that the agent interprets:
+
+```
+# This becomes a heading
+**This becomes bold**
+[This becomes a link](https://example.com)
+```
+
+### Key Markdown Syntax
+
+**Headings:**
+```markdown
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+**Bold and Emphasis:**
+```markdown
+*single asterisk for italic*
+**double asterisk for bold**
+```
+
+**Links:**
+```markdown
+[Link text](https://url.com)
+```
+
+**Lists:**
+```markdown
+- Bullet point
+- Another bullet point
+
+1. Numbered item
+2. Another numbered item
+```
+
+**Code Blocks:**
+```markdown
+\`\`\`
+Code goes here
+Multiple lines supported
+\`\`\`
+```
+
+**Inline Code:**
+```markdown
+Use `backticks` for inline code like function names
+```
+
+### Critical: Don't Use Google Docs Formatting
+
+❌ **DON'T:**
+- Use Google Docs' "Bold" button (Ctrl+B / Cmd+B)
+- Use Google Docs' heading styles dropdown
+- Use "Insert → Link" menu
+- Use "Format → Paragraph styles"
+
+✅ **DO:**
+- Type Markdown syntax manually as plain text
+- Use `**bold**` instead of clicking Bold button
+- Use `[link](url)` instead of Insert → Link
+- Use `#` for headings instead of style dropdown
+
+### Why This Matters
+
+When you click Google Docs' "Bold" button:
+- **You see:** Bold text in the document
+- **Agent sees:** Regular text (no asterisks)
+- **Result:** Agent can't detect the formatting ❌
+
+When you type `**bold**` as text:
+- **You see:** Literal `**bold**` in the document
+- **Agent sees:** `**bold**` (understands this means bold)
+- **Result:** Agent correctly interprets formatting ✅
+
+### Practical Example
+
+**Wrong approach (using Google Docs formatting):**
+
+```
+[What you type in Google Docs with Ctrl+B applied]
+Release 1.5.0 Status
+
+[What agent sees]
+Release 1.5.0 Status   ← No heading marker!
+```
+
+**Correct approach (using Markdown):**
+
+```
+[What you type in Google Docs as plain text]
+## Release 1.5.0 Status
+
+[What agent sees]
+## Release 1.5.0 Status   ← Agent understands this is a heading!
+```
+
+### Tips for Working in Google Docs
+
+1. **Use monospace font (optional but helpful):**
+   - Select all text (Ctrl+A / Cmd+A)
+   - Font → "Courier New" or "Roboto Mono"
+   - This makes Markdown syntax easier to read
+
+2. **Turn off auto-formatting:**
+   - Tools → Preferences
+   - Uncheck "Use smart quotes"
+   - Uncheck "Automatic substitution"
+
+3. **Preview your Markdown:**
+   - Copy a section
+   - Paste into a Markdown preview tool (e.g., https://markdownlivepreview.com/)
+   - Verify formatting looks correct
+
+4. **Keep a reference open:**
+   - Keep the template file open in a second tab
+   - Copy formatting patterns from template
+   - Ensures consistency
+
+### Common Mistakes
+
+**Mistake 1: Mixing Markdown and Google Docs formatting**
+```
+❌ **Bold text** with <Google Docs bold applied to different text>
+✅ **Bold text** all in Markdown
+```
+
+**Mistake 2: Not escaping special characters**
+```
+❌ Use * for multiplication  (Markdown thinks this is italic)
+✅ Use \* for multiplication  (Backslash escapes the asterisk)
+```
+
+**Mistake 3: Forgetting code blocks**
+```
+❌ project = RHDH AND fixVersion = "1.5.0"
+   (Agent might interpret = as Markdown)
+
+✅ ```
+   project = RHDH AND fixVersion = "1.5.0"
    ```
-   User: "What's your process for releases?"
-   Agent: [Should describe YOUR team's process]
-   ```
+   (Code block protects special characters)
+```
+
+### Quick Reference Card
+
+Save this in your Google Doc as a comment or separate section:
+
+```markdown
+# Heading 1        ## Heading 2        ### Heading 3
+*italic*           **bold**             `code`
+[link](url)        - bullet list       1. numbered list
+
+Code block:
+\`\`\`
+code here
+\`\`\`
+```
 
 ## Making Updates
 
@@ -338,55 +483,40 @@ Update the prompt when:
 ### How to Update
 
 1. **Edit the Google Doc directly:**
-   - No code changes needed
-   - No deployment required
-   - Just save the doc
+   - Open your Google Doc
+   - Make changes using Markdown syntax (see "Working with Markdown" section)
+   - Save automatically (Google Docs saves as you type)
 
-2. **Changes take effect when:**
-   - User re-authorizes Google Drive (invalidates cache)
-   - Agent is recreated (cache cleared)
-   - Application restarts
-
-3. **Force immediate update:**
-   ```bash
-   # Restart the services
-   nox -s dev_stop
-   nox -s dev_build
-   ```
+2. **Changes take effect:**
+   - Changes are live immediately in the Google Doc
+   - The agent will use updated content when it refreshes
+   - Coordinate with your technical team if changes need immediate application
 
 ### Testing Updates
 
-**Development Workflow:**
+**Best Practice: Use a Dev Copy**
 
 1. **Create dev copy:**
-   - Duplicate your prod Google Doc
+   - In Google Drive, right-click your production doc
+   - Select "Make a copy"
    - Name it: "Release Manager System Prompt - DEV"
 
-2. **Configure dev environment:**
-   ```bash
-   # In .env
-   RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=<dev-doc-url>
-   ```
+2. **Make and test changes:**
+   - Edit the dev doc with your proposed changes
+   - Share dev doc URL with technical team for testing
+   - Ask technical team to verify agent behavior with dev doc
 
-3. **Make and test changes:**
-   - Edit dev doc
-   - Restart: `nox -s dev_build`
-   - Test with agent
-   - Verify responses match expectations
+3. **Deploy to production:**
+   - Once testing confirms changes work correctly
+   - Copy the updated content from dev doc to production doc
+   - Production agent will use new content on next refresh
 
-4. **Deploy to production:**
-   - Copy working content from dev doc to prod doc
-   - Update production `.env.secrets` to use prod doc URL
-   - Restart production services
+**Quick Edits (for minor changes):**
 
-**Single-User Testing:**
-
-If you don't have separate dev/prod:
-
-1. Edit the doc
-2. Restart local dev environment
-3. Test thoroughly
-4. Leave changes (production will pick up on next restart)
+If you're fixing typos or updating dates:
+1. Edit production doc directly
+2. Changes are live immediately
+3. Monitor agent responses to ensure no issues
 
 ## Customization Examples
 
@@ -558,130 +688,158 @@ If multiple people maintain the prompt:
 
 ## Troubleshooting
 
-### Agent Not Using Instructions
+### Agent Not Using My Instructions
 
 **Issue:** Agent doesn't follow the extended prompt
 
-**Possible Causes:**
+**What You Can Check:**
 
-1. **Fetch failed:**
-   - Check logs for errors
-   - Verify document URL in `.env.secrets`
-   - Ensure document is publicly readable
+1. **Verify document sharing:**
+   - Open your Google Doc
+   - Click "Share" button
+   - Ensure "Anyone with the link can view" is enabled
+   - OR ensure specific technical team members have access
 
-2. **Cache not invalidated:**
-   - Restart services: `nox -s dev_build`
-   - User hasn't re-authorized Google Drive
-
-3. **Instructions unclear:**
-   - Review wording for ambiguity
+2. **Check instructions clarity:**
+   - Review your wording for ambiguity
    - Add more specific examples
-   - Test with specific questions
+   - Use concrete function names (e.g., `get_issue()`)
+   - Follow the "Quick Self-Audit Checklist" above
+
+3. **Contact technical team:**
+   - Share the specific agent behavior you're seeing
+   - Provide the doc URL
+   - Ask them to verify the agent is reading your doc
 
 ### Document Permission Issues
 
-**Error:** "Failed to fetch extended system prompt"
+**Symptom:** Technical team reports "Failed to fetch extended system prompt"
 
-**Solutions:**
+**What You Can Do:**
 
-1. **Check sharing settings:**
+1. **Fix sharing settings:**
    - Open Google Doc
-   - Click "Share"
-   - Verify: "Anyone with the link can view" (or specific users added)
+   - Click "Share" button
+   - Change to "Anyone with the link can view"
+   - OR add the service account email provided by technical team
 
-2. **Verify URL:**
-   - Check `.env.secrets` has correct URL or doc ID
-   - Try both full URL and just ID:
-     ```bash
-     # Both should work
-     RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=https://docs.google.com/document/d/1ABC123/edit
-     RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=1ABC123
-     ```
-
-3. **Check Google Drive authorization:**
-   - User must have authorized Google Drive access
-   - Agent will prompt if not configured
+2. **Verify you're sharing the right link:**
+   - Copy the document URL from your browser
+   - It should look like: `https://docs.google.com/document/d/LONG_ID_HERE/edit`
+   - Share this exact URL with technical team
 
 ### Changes Not Appearing
 
-**Issue:** Updated doc but agent still uses old instructions
+**Issue:** You updated the doc but agent still uses old instructions
 
-**Solutions:**
+**What You Can Do:**
 
-1. **Clear cache:**
-   ```bash
-   nox -s dev_clean  # Clears everything
-   nox -s dev_build
-   ```
+1. **Verify you're editing the right doc:**
+   - Ask technical team which doc URL is configured
+   - Open that doc and confirm it has your changes
+   - Check you're not accidentally editing a copy
 
-2. **Check correct doc:**
-   - Verify you're editing the right Google Doc
-   - Check `.env.secrets` points to the doc you're editing
-   - Open both and compare
+2. **Check for Markdown errors:**
+   - Copy a section of your doc
+   - Paste into https://markdownlivepreview.com/
+   - Verify formatting renders correctly
+   - Fix any syntax errors
 
-3. **Verify agent recreation:**
-   - Agent only fetches on creation
-   - Must restart services or invalidate agent cache
+3. **Request cache refresh:**
+   - Contact technical team
+   - Ask them to refresh the agent's cache
+   - Provide doc URL and what you changed
 
 ## FAQ
 
-**Q: Can I use multiple prompt documents?**
+**Q: Can I use Google Docs formatting (bold, headings, etc.)?**
 
-A: No, configure one document per environment (dev, prod). You can have separate docs for dev and prod, but each environment uses only one.
+A: No! You must use Markdown syntax. The agent reads raw text, not formatting. Click **Bold** in Google Docs and the agent sees nothing. Type `**bold**` as text and the agent understands it. See "Working with Markdown in Google Docs" section.
 
-**Q: What if I want different instructions for different users?**
+**Q: How do I make headings?**
 
-A: The extended prompt is shared by all users. For user-specific behavior, you'd need code changes (different agent instances).
+A: Type `#` symbols as text:
+- `# Heading 1` (one hash)
+- `## Heading 2` (two hashes)
+- `### Heading 3` (three hashes)
 
-**Q: Can I include code in the prompt?**
+Don't use Google Docs' "Heading" style dropdown!
 
-A: Yes, you can include example JQL queries, markdown formatting templates, etc. But don't include Python code or agent implementation details.
+**Q: How do I make links?**
+
+A: Type `[link text](https://url.com)` as plain text. Don't use Google Docs "Insert → Link" menu. The agent reads the Markdown syntax `[...](..)`, not Google Docs hyperlinks.
+
+**Q: Can I include code (like JQL queries)?**
+
+A: Yes! Use triple backticks for code blocks:
+```
+\`\`\`
+project = RHDH AND fixVersion = "1.5.0"
+\`\`\`
+```
+This protects special characters from being interpreted as Markdown.
 
 **Q: How large can the prompt be?**
 
-A: Technically up to ~50KB, but keep it concise. Long prompts can impact response time and quality. Aim for <10KB.
+A: Keep it concise - aim for under 10KB (roughly 20-30 Google Docs pages). Long prompts can slow agent responses and reduce quality. Follow the "Conciseness" principle.
 
-**Q: Can I use formatting in the Google Doc?**
+**Q: What if I want different instructions for different users?**
 
-A: The agent reads the raw text. Use markdown syntax (like in the template) for formatting. Google Doc formatting (bold, colors) won't transfer.
+A: The prompt is shared by all users. Everyone using the agent sees the same instructions. For user-specific behavior, contact your technical team.
 
-**Q: What happens if document fetch fails?**
+**Q: Can I test changes before they go live?**
 
-A: Agent creation fails with an error. Set `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` to empty to disable (agent will work with embedded prompt only).
+A: Yes! Make a copy of the production doc, edit the copy, and share it with your technical team for testing. Once verified, copy the changes to the production doc.
 
-**Q: Can I test prompt changes without deploying?**
+**Q: Do my changes take effect immediately?**
 
-A: Yes! Use a dev Google Doc and point your local `.env.secrets` to it. Test locally before updating production doc.
+A: Changes are saved immediately in Google Docs, but the agent may cache the prompt. For important changes, notify your technical team so they can refresh the cache.
 
 ## Getting Help
 
 **For Prompt Content Questions:**
-- Review agent responses
-- Check Jira queries manually
-- Test instructions step-by-step
-- Get feedback from team
+- Test Jira queries manually in Jira first
+- Use Markdown preview tool to verify formatting: https://markdownlivepreview.com/
+- Review the "Quick Self-Audit Checklist" above
+- Get feedback from team members who use the agent
 
 **For Technical Issues:**
-- Check application logs: `nox -s dev_logs`
-- See [CONFIGURATION.md](../CONFIGURATION.md) for setup
-- See [CLAUDE.md](../../CLAUDE.md) for architecture
-- File an issue in the repo
+- Contact your technical team
+- Provide: doc URL, what you changed, and what behavior you're seeing
+- They can check logs and configuration
 
 ## Summary Checklist
 
 When maintaining the prompt:
 
+**Content Quality:**
 - [ ] Instructions are clear and specific
-- [ ] Jira queries tested and working
+- [ ] Jira queries tested manually in Jira first
 - [ ] Slack channels are current
 - [ ] Process timelines match reality
 - [ ] Examples provided for complex formats
 - [ ] No hardcoded release data
 - [ ] Written for agent, not users
+
+**Markdown Formatting:**
+- [ ] Used `**bold**` syntax (not Google Docs Bold button)
+- [ ] Used `[text](url)` for links (not Insert → Link)
+- [ ] Used `#` `##` `###` for headings (not Heading styles)
+- [ ] Code blocks wrapped in triple backticks (\`\`\`)
+- [ ] Previewed in https://markdownlivepreview.com/
+
+**Best Practices:**
+- [ ] Followed "Quick Self-Audit Checklist" (7 points above)
+- [ ] No duplicate queries or empty sections
+- [ ] Used actual function names (`get_issue()`)
+- [ ] Outcome-focused structure (Output → Data → Template)
+
+**Deployment:**
 - [ ] Changes logged in document
-- [ ] Tested before deploying to production
+- [ ] Tested in dev copy before production
 - [ ] Team notified of updates
+- [ ] Technical team contacted for cache refresh (if needed)
 
 ---
 
-**Remember:** The extended prompt is a powerful tool for customizing agent behavior without code changes. Keep it up to date, test your changes, and iterate based on user feedback!
+**Remember:** The extended prompt is a powerful tool for customizing agent behavior. Keep it concise, use Markdown correctly, test your changes, and iterate based on user feedback!

@@ -51,14 +51,6 @@ You are the Release Manager for Red Hat Developer Hub (RHDH). Your primary respo
 
 `project in (RHDHPlan,rhidp) AND issuetype = feature AND fixVersion = "[RELEASE_VERSION]" AND fixversion changed after -14d`
 
-## **Jira list of feature freeze**
-
-`project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "[RELEASE_VERSION]" and status != closed`
-
-## **Jira list of code freeze**
-
-`project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND fixVersion = "[RELEASE_VERSION]" and status != closed`
-
 ---
 
 # Available Tools
@@ -374,11 +366,7 @@ cc [@rhdh-release](https://redhat.enterprise.slack.com/admin/user_groups)
 
 ⚠️ **Note:** The dashboard link includes the filter ID. If the dashboard changes, update the link here.
 
-## **Announce Feature Freeze**
-
-## **Announce Code Freeze Update**
-
-## **Announce Code Freeze**
+---
 
 # Response standards and formats
 

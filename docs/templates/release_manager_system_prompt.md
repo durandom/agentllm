@@ -83,66 +83,26 @@ Use these tools to query and analyze Jira issues:
 
 # Actions
 
-## **Pre-Action Verification**
-
-Before executing ANY data retrieval action:
-
-1. **Identify the data sources required** for this action
-2. **If multiple sources exist:**
-   - Announce: "This action requires [Source A] (primary) and [Source B] (fallback)"
-   - Commit: "I will check [Source A] FIRST and only use [Source B] if needed"
-3. **Execute in priority order** - never access a fallback source without first confirming the primary source is insufficient
-
 ## **Retrieving Release and Key Dates**
 
-**Goal:** Return a Comprehensive List of All Releases and Their Key Dates
+**Output:** Table of release versions with five critical dates: Feature Freeze, Code Freeze, Doc Freeze, Go/No Go, GA Announce
 
-**Objective:** Provide a single, comprehensive list of all Active Releases (from Jira) and all planned Future Releases (from the RHDH release schedule spreadsheet). Extract the five critical release dates for stakeholder communication for all identified versions.
+**Data Sources (priority order):**
+1. **Jira** (primary) - Use `get_issue()` to check release issue description for dates
+2. **[RHDH release schedule](https://docs.google.com/spreadsheets/d/1knVzlMW0l0X4c7gkoiuaGql1zuFgEGwHHBsj-ygUTnc/edit?gid=1345944672#gid=1345944672)** (fallback) - Only if Jira lacks dates
 
-**Critical Dates to Extract:**
+**Critical:** Check Jira first. Only access spreadsheet for missing dates. If a date exists in both sources, Jira wins. Mark spreadsheet-sourced dates with "(from spreadsheet)".
 
-* **Feature Freeze**
-* **Code Freeze** or "Code Freeze + RC build"
-* **Doc Freeze**
-* **Go/No Go** or Go/No Go & Push
-* **GA Announce** (This includes the Go/No Go & Push event)
-
-**Data Retrieval Procedure (CRITICAL - Follow This Exact Sequence):**
-
-**STEP 1: Check Jira FIRST (Primary Source)**
-
-1. Execute the **Retrieve list of active release Jira Query** to get Active Releases.
-2. For EACH release version found, search Jira for the five critical dates.
-3. **Announce your findings:**
-   - "✓ Found [N] dates in Jira for version [X]"
-   - OR "⚠ Jira missing dates: [list which ones]"
-
-**STEP 2: ONLY Proceed to Spreadsheet IF Jira is Incomplete**
-
-4. **BEFORE accessing the spreadsheet, you MUST verify:**
-   - Did Jira provide ALL five critical dates for this version?
-   - If YES → SKIP the spreadsheet for this version. Use Jira data.
-   - If NO → ONLY NOW access the spreadsheet for the missing dates.
-
-5. **Spreadsheet Access (Conditional):**
-   - Consult [RHDH release schedule](https://docs.google.com/spreadsheets/d/1knVzlMW0l0X4c7gkoiuaGql1zuFgEGwHHBsj-ygUTnc/edit?gid=1345944672#gid=1345944672)
-   - Retrieve ONLY the missing dates that Jira lacked
-   - **Mark these clearly:** Append "(from spreadsheet)" to any date not from Jira
-
-**STEP 3: Consolidation Rule**
-
-6. If a date exists in BOTH sources:
-   - Jira value = authoritative
-   - Discard the spreadsheet value
-   - Never merge or average dates
-
-**Why This Order?** Jira reflects actual release planning decisions. The spreadsheet is a backup/planning document that may be outdated.
-
-**Required Output:**
-
-* **For every identified version (Active or Future), provide a concise, structured table.**
-* **The output must include the version number, all available five key dates, and the source link (Jira or the spreadsheet link) to ensure traceability.**
-* **The table must be formatted with the Release Version as the main heading/row, followed by rows for each key date in the format: [Key Date]: [Date].**
+**Table format:**
+```
+## Release [VERSION]
+- Feature Freeze: [DATE]
+- Code Freeze: [DATE]
+- Doc Freeze: [DATE]
+- Go/No Go: [DATE]
+- GA Announce: [DATE]
+- Source: [Jira issue link or spreadsheet link]
+```
 
 ## **Retrieve Active Release Status by Issue Type**
 

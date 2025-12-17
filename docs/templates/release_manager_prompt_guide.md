@@ -66,6 +66,210 @@ Good: "Use Google Drive tools to fetch release calendar..."
 ```
 These belong in the embedded prompt (code), not here.
 
+---
+
+## Prompt Engineering Best Practices
+
+Before you start customizing, understand these core principles. They'll help you write effective, maintainable prompts.
+
+### Principle 1: Explicit Tool Mapping
+
+**Problem:** Abstract action names force the LLM to guess which tool to use.
+
+**Bad:**
+```markdown
+When user asks about team issues, run **Retrieve Issues by Team** for each team.
+```
+
+**Good:**
+```markdown
+When user asks about team issues, use `get_issues_by_team(release_version, team_ids)` for accurate per-team counts.
+```
+
+**Why:** The agent knows exactly which function to call and what parameters it needs. No inference required.
+
+**Action:** Always use actual function names like `get_issue()`, `get_issues_by_team()`, `get_document_content()` instead of abstract descriptions.
+
+---
+
+### Principle 2: DRY (Don't Repeat Yourself)
+
+**Problem:** Duplication wastes tokens and creates ambiguity.
+
+**Bad:**
+```markdown
+## Query for Feature Freeze
+project IN (RHIDP, RHDHBugs) AND fixVersion = "X" and status != closed
+
+## Query for Code Freeze
+project IN (RHIDP, RHDHBugs) AND fixVersion = "X" and status != closed
+
+## Query for Open Issues
+project IN (RHIDP, RHDHBugs) AND fixVersion = "X" and status != closed
+```
+
+**Good:**
+```markdown
+## Query for Open Issues
+project IN (RHIDP, RHDHBugs) AND fixVersion = "[RELEASE_VERSION]" and status != closed
+
+Note: Use this query for all freeze milestones (Feature, Code, Doc)
+```
+
+**Why:** Each token counts toward context limits. Duplication = wasted space.
+
+**Action:** Define concepts once, reference them elsewhere. Remove TODO sections and empty placeholders.
+
+---
+
+### Principle 3: Conciseness - Assume the LLM is Smart
+
+**Problem:** Verbose meta-instructions about "how to think" waste tokens.
+
+**Bad:**
+```markdown
+Before retrieving data:
+1. Identify the data sources required for this action
+2. If multiple sources exist:
+   - Announce: "This action requires [Source A] (primary)..."
+   - Commit: "I will check [Source A] FIRST..."
+3. Execute in priority order...
+```
+
+**Good:**
+```markdown
+Data Sources (priority order):
+1. Jira (primary) - Use `get_issue()` for release dates
+2. Spreadsheet (fallback) - Only if Jira lacks dates
+```
+
+**Why:** Modern LLMs already know how to reason step-by-step. Don't teach them HOW to think, just WHAT to produce.
+
+**Action:** Remove instructions like "announce your findings," "commit to checking X first," "verify before accessing Y." The agent does this naturally.
+
+---
+
+### Principle 4: Outcome-Focused Instructions
+
+**Problem:** Procedural "do-this-then-that" steps constrain the agent's path-finding.
+
+**Bad:**
+```markdown
+📋 First, gather the data:
+| Step | What to Do | What You'll Get |
+| 1 | Run Retrieve Release Dates | Feature Freeze date |
+| 2 | Run Retrieve Teams | List of teams |
+| 3 | For each team, run Retrieve Issues | Counts |
+
+▶️ Then, fill in the template:
+```
+
+**Good:**
+```markdown
+**Output:** Slack message announcing Feature Freeze status
+
+**Data Requirements:**
+1. Feature Freeze date - Use `get_issue(RHDHPLAN-XXX)`
+2. Active engineering teams - Use `get_document_content("DOC_ID")`
+3. Team issue counts - Use `get_issues_by_team(version, ids)`
+
+**Template:**
+[actual template here]
+```
+
+**Why:** Lead with the destination (desired output), not the journey (procedure). Agents are excellent pathfinders - give them the goal and they'll optimize the route.
+
+**Action:** Structure instructions as `Output → Data Requirements → Template`, not `Step 1 → Step 2 → Step 3 → Output`.
+
+---
+
+### Principle 5: Format Targeting (Destination + Delivery Method)
+
+**Problem:** Output format must match BOTH the platform AND how it's delivered.
+
+**Critical Discovery:** Slack has TWO formatting systems:
+- **mrkdwn** (API/webhooks): `<url|text>` for links, `*bold*`
+- **Markdown** (manual paste): `[text](url)` for links, `*bold*`
+
+**Bad (assumes API):**
+```markdown
+• *Team* - <https://jira.com/...|71> @Lead
+```
+This ONLY works via API/webhooks, NOT manual pasting!
+
+**Good (for copy-paste):**
+```markdown
+• *Team* - [71](https://jira.com/...) @Lead
+```
+This works when pasting into Slack manually.
+
+**Why:** The `<url|text>` syntax fails when manually pasted. Users see raw angle brackets instead of links.
+
+**Action:**
+- For copy-paste workflows → Use Markdown: `[text](url)`
+- For API/webhook workflows → Use mrkdwn: `<url|text>`
+- Match format to delivery method, not just destination platform
+
+**Slack Formatting Reference:**
+| Format | Markdown (paste) | mrkdwn (API) |
+|--------|-----------------|--------------|
+| Bold | `*text*` | `*text*` |
+| Link | `[text](url)` | `<url\|text>` |
+| Link count | `[71](url)` | `<url\|71>` |
+
+---
+
+### Common Pitfalls to Avoid
+
+**1. Empty Section Placeholders**
+```markdown
+❌ ## Announce Code Freeze
+
+    (no content - TODO)
+```
+Remove empty sections. They waste tokens and create confusion.
+
+**2. Mixing Formatting Syntaxes**
+```markdown
+❌ *RHDH 1.9.0 <url|Feature Freeze> Update*
+   (mixing Markdown bold with mrkdwn link)
+```
+Pick ONE syntax and use it consistently.
+
+**3. Triple-Duplicated Queries**
+```markdown
+❌ Same JQL query repeated under three different section names
+```
+Define once, reference elsewhere.
+
+**4. Meta-Commentary About Thinking**
+```markdown
+❌ "Think carefully about whether Jira has the dates before checking the spreadsheet"
+```
+State the constraint, trust the agent to reason.
+
+**5. Abstract Action Names Without Tool Mapping**
+```markdown
+❌ "Run Retrieve Issues by Team"
+✅ "Use get_issues_by_team(release_version, team_ids)"
+```
+
+---
+
+### Quick Self-Audit Checklist
+
+Before deploying prompt changes, verify:
+
+- [ ] **Tool mapping** - All actions use actual function names (`get_issue()`)
+- [ ] **No duplication** - Each JQL query defined once
+- [ ] **Concise** - No meta-instructions about how to think
+- [ ] **Outcome-first** - Instructions lead with desired output
+- [ ] **Format consistency** - One syntax (Markdown OR mrkdwn), not mixed
+- [ ] **No empty sections** - Remove TODO placeholders
+- [ ] **Tested** - Verified with actual agent before deploying
+
+---
+
 ## Getting Started
 
 ### Initial Setup

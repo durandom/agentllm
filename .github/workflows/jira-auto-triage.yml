@@ -1,0 +1,107 @@
+name: Jira Auto-Triage
+
+on:
+  # Scheduled run once daily at 6am EST (11am UTC), weekdays only (TEMPORARILY DISABLED)
+  # schedule:
+  #   - cron: "0 11 * * 1-5"  # Monday-Friday at 6am EST / 11am UTC
+
+  # Manual trigger with custom options
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run mode (preview only)"
+        required: false
+        default: false
+        type: boolean
+      jql_filter:
+        description: "Custom JQL filter (optional - uses default if empty)"
+        required: false
+        type: string
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+
+      - name: Checkout configuration repository
+        uses: actions/checkout@v4
+        with:
+          repository: JessicaJHee/rhdh-jira-triager-knowledge
+          token: ${{ secrets.GH_PRIVATE_REPO_TOKEN }}
+          path: config
+
+      - name: Setup ephemeral database from secrets
+        env:
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          uv run python scripts/setup_database_from_secrets.py
+
+      - name: Run auto-triage (dry-run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LOGURU_LEVEL: INFO
+          AGNO_DEBUG: false
+        run: |
+          # Build command with optional JQL filter
+          CMD="uv run python scripts/auto_triage.py --dry-run --json-output"
+          if [ -n "${{ github.event.inputs.jql_filter }}" ]; then
+            CMD="$CMD --jql '${{ github.event.inputs.jql_filter }}'"
+          fi
+          eval "$CMD" > results.json
+
+      - name: Run auto-triage (apply)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LOGURU_LEVEL: INFO
+          AGNO_DEBUG: false
+        run: |
+          # Build command with optional JQL filter
+          CMD="uv run python scripts/auto_triage.py --apply --json-output"
+          if [ -n "${{ github.event.inputs.jql_filter }}" ]; then
+            CMD="$CMD --jql '${{ github.event.inputs.jql_filter }}'"
+          fi
+          eval "$CMD" > results.json || EXIT_CODE=$?
+
+          if [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "Triage failed (exit code $EXIT_CODE)"
+            exit "$EXIT_CODE"
+          fi
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          uv run python scripts/send_slack_notification.py
+
+      - name: Check for failures
+        run: |
+          # Extract failure count from results.json
+          FAILED=$(jq -r '.failed // 0' results.json)
+          APPLIED=$(jq -r '.applied // 0' results.json)
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "⚠️ Warning: Triage completed with $FAILED failures"
+            echo "Successfully processed $APPLIED issues"
+            exit 1
+          fi

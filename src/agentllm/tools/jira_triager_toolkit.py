@@ -50,6 +50,9 @@ class JiraTriagerTools(Toolkit):
         # Jira client (lazy loaded)
         self._jira_client: JIRA | None = None
 
+        # Cache for project components (to avoid repeated API calls)
+        self._component_cache: dict[str, list[str]] = {}
+
         logger.debug("JiraTriagerTools initialized for logic-based triage")
 
         # Register tools
@@ -73,18 +76,27 @@ class JiraTriagerTools(Toolkit):
     def _get_project_components(self, project_key: str) -> list[str]:
         """Get list of allowed component names for a Jira project.
 
+        Uses caching to avoid repeated API calls for the same project.
+
         Args:
             project_key: Jira project key (e.g., "RHIDP")
 
         Returns:
             List of component names allowed in the project
         """
+        # Check cache first
+        if project_key in self._component_cache:
+            logger.debug(f"Using cached components for project {project_key}")
+            return self._component_cache[project_key]
+
+        # Fetch from JIRA and cache
         try:
             jira = self._get_jira_client()
             project = jira.project(project_key)
             components = jira.project_components(project)
             component_names = [comp.name for comp in components]
-            logger.debug(f"Found {len(component_names)} components for project {project_key}")
+            logger.debug(f"Fetched and cached {len(component_names)} components for project {project_key}")
+            self._component_cache[project_key] = component_names
             return component_names
         except Exception as e:
             logger.warning(f"Failed to fetch components for project {project_key}: {e}")
@@ -99,12 +111,9 @@ class JiraTriagerTools(Toolkit):
         override_components: str | None = None,
     ) -> str:
         """
-        Recommend team and component assignments for a Jira ticket using logic-based analysis.
+        Recommend team and component assignments for a Jira ticket.
 
-        This tool analyzes the ticket content using component mappings, keyword patterns,
-        and assignee validation as defined in the agent instructions. The agent performs
-        the actual decision logic based on COMPONENT_TEAM_MAP, keyword analysis, and
-        TEAM_ASSIGNEE_MAP.
+        This tool fetches ticket data for agent analysis.
 
         Args:
             issue_key: Jira ticket ID (e.g., "RHIDP-6496")

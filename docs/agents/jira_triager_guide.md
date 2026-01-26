@@ -18,40 +18,35 @@ Analyzes Jira tickets and recommends team/component assignments using component 
 **Single ticket**: `Triage RHIDP-8796`
 - Agent analyzes and shows recommendations
 - Shows summary table with ticket
-- Asks for confirmation before updating
+- Automation mode: Script controls application
 
 **Batch triage**: `Triage all issues in queue`
 - Agent finds all tickets from configured filter
 - Processes ALL tickets first
 - Shows ONE consolidated table with ALL tickets
-- Asks for confirmation before updating all
+- Automation mode: Script controls application
 
 ## Update Workflow
 
-**Single Ticket:**
-1. Agent analyzes ticket
-2. Shows recommendations
-3. Asks: "Would you like me to apply these changes to Jira?"
-4. Shows summary table
-5. Waits for "yes" confirmation
-6. Updates empty fields only
+**Automation Mode (CronJob/Scripts):**
+1. Agent analyzes all tickets
+2. Shows reasoning for each decision
+3. Outputs consolidated summary table
+4. Script parses table and applies changes based on configuration
 
-**Batch Triage:**
-1. Agent searches for all tickets (using filter)
-2. Processes ALL tickets (triages each one)
-3. Shows ONE table with ALL recommendations:
+**Interactive Mode (Web UI):**
+1. Agent analyzes ticket(s)
+2. Shows recommendations and reasoning
+3. Outputs summary table:
    ```
    | Ticket | Summary | Field | Current | Recommended | Confidence | Action |
    |--------|---------|-------|---------|-------------|------------|--------|
-   | RHIDP-100 | Login fails | Team<br>Components | (empty)<br>Catalog | Security<br>Catalog, Keycloak | 95%<br>90% | NEW<br>APPEND |
-   | RHIDP-101 | Operator crash | Team<br>Components | Install<br>(empty) | Already Set<br>Operator | -<br>85% | SKIP<br>NEW |
+   | RHIDP-100 | Login fails | Team | (empty) | Security | 100% | NEW |
+   |  |  | Components | Catalog | Catalog, Keycloak | 90% | APPEND |
+   | RHIDP-101 | Operator crash | Team | Install | Already Set | - | SKIP |
+   |  |  | Components | (empty) | Operator | 85% | NEW |
    ```
-
-   Note: Each ticket shown as single row with Team/Components using `<br>` tags
-
-4. Asks: "Ready to apply these changes? (yes/no)"
-5. Updates all approved tickets
-6. Reports progress and final summary
+4. Updates are controlled by the calling environment (script or user)
 
 **Action Codes:**
 - NEW: Field is empty, will add new value
@@ -60,21 +55,24 @@ Analyzes Jira tickets and recommends team/component assignments using component 
 
 ## Confidence Scores
 
-- 95%: Specific component + keywords + assignee
-- 90%: Component + keywords align
-- 85%: Clear component mapping
-- 75%: Strong keywords only
-- 60%: General component only
-- <50%: Ask for guidance
+- **100%**: Assignee found in team mapping (deterministic)
+- **90-95%**: Strong logical match (issue domain clearly aligns with team)
+- **75-85%**: Moderate match (issue relates to team's area)
+- **60-70%**: Weak match (best guess)
+- **<60%**: Ask for guidance
 
-**Component Validation**: The agent automatically validates that recommended components
-exist in the Jira project before suggesting them. Invalid components are rejected.
+**Component Validation**: Agent validates recommended components exist in Jira project before suggesting.
 
 ## Configuration
 
-**Google Drive Folder** (`JIRA_TRIAGER_GDRIVE_FOLDER_ID`):
-- `rhdh-teams.json` - Team config (IDs, components, members)
-- `jira-filter.txt` - Default JQL filter (optional)
+**Automation Mode** (CronJob):
+- `rhdh-teams.json` - Team config mounted as ConfigMap (IDs, components, members)
+- System prompt embedded in code (`jira_triager_configurator.py` lines 96-217)
+
+**Interactive Mode**:
+- Google Drive folder (`JIRA_TRIAGER_GDRIVE_FOLDER_ID`):
+  - `rhdh-teams.json` - Team config
+  - `jira-filter.txt` - Default JQL filter (optional)
 
 **rhdh-teams.json example**:
 ```json
@@ -86,6 +84,11 @@ exist in the Jira project before suggesting them. Invalid components are rejecte
   }
 }
 ```
+
+**Updating System Prompt**:
+- Edit `src/agentllm/agents/jira_triager_configurator.py` lines 96-217
+- Rebuild container: `make build-agentllm`
+- Deploy new image
 
 ## Troubleshooting
 

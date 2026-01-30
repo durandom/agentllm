@@ -253,76 +253,65 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
     def get_agent_instructions(self, user_id: str) -> list[str]:
         """Get Jira Triager-specific agent instructions.
 
+        Provides dynamic configuration data (team mappings) loaded from rhdh-teams.json.
+        The triage strategy is defined in JiraTriagerConfigurator, not here.
+
         Args:
             user_id: User identifier
 
         Returns:
-            List of instruction strings
+            List of instruction strings with configuration data
         """
         if not self.get_toolkit(user_id):
             return []
 
-        instructions = [
-            "TRIAGE DECISION ALGORITHM:",
-            "",
-            "1. COMPONENT ANALYSIS (Primary):",
-            "   - Check COMPONENT_TEAM_MAP for ticket components",
-            "   - Specific components override general ones",
-            "   - Clear mapping → 85-90% confidence baseline",
-            "   - CRITICAL: Validate recommended components against allowed_components from triage_ticket",
-            "   - Only recommend components that exist in allowed_components list",
-            "",
-            "2. KEYWORD ANALYSIS (Secondary):",
-            "   Security Team keywords: keycloak, oauth, oidc, rbac, authentication",
-            "   Install Team keywords: operator, helm, deployment, kubernetes",
-            "   Frontend Team keywords: scaffolder, template, UI, react, theme",
-            "   Backend Team keywords: backend, API, service, database, performance",
-            "",
-            "3. ASSIGNEE VALIDATION (Tertiary):",
-            "   - Check TEAM_ASSIGNEE_MAP",
-            "   - Matching assignee → +5% confidence",
-            "",
-            "See external system prompt (Google Doc) for detailed triage guidelines.",
-        ]
+        instructions = []
 
-        # Add configuration from Google Drive if loaded
+        # Add configuration data loaded from rhdh-teams.json
         config = self._user_configs.get(user_id)
-        if config:
+        if not config:
+            logger.warning(
+                f"No configuration loaded for user {user_id}. "
+                "Agent will not have team mappings. "
+                "Check JIRA_TRIAGER_CONFIG_FILE or rhdh-teams.json file."
+            )
+            return instructions
+
+        instructions.append("")
+        instructions.append("CONFIGURATION (loaded from rhdh-teams.json):")
+
+        if "allowed_teams" in config:
             instructions.append("")
-            instructions.append("CONFIGURATION (loaded from Google Drive):")
+            instructions.append("ALLOWED_TEAMS:")
+            instructions.append("```json")
+            instructions.append(json.dumps(config["allowed_teams"], indent=2))
+            instructions.append("```")
 
-            if "allowed_teams" in config:
-                instructions.append("")
-                instructions.append("ALLOWED_TEAMS:")
-                instructions.append("```json")
-                instructions.append(json.dumps(config["allowed_teams"], indent=2))
-                instructions.append("```")
+        if "component_team_map" in config:
+            instructions.append("")
+            instructions.append("COMPONENT_TEAM_MAP:")
+            instructions.append("```json")
+            instructions.append(json.dumps(config["component_team_map"], indent=2))
+            instructions.append("```")
 
-            if "component_team_map" in config:
-                instructions.append("")
-                instructions.append("COMPONENT_TEAM_MAP:")
-                instructions.append("```json")
-                instructions.append(json.dumps(config["component_team_map"], indent=2))
-                instructions.append("```")
+        if "team_id_map" in config:
+            instructions.append("")
+            instructions.append("TEAM_ID_MAP (Jira Team Field IDs):")
+            instructions.append("```json")
+            instructions.append(json.dumps(config["team_id_map"], indent=2))
+            instructions.append("```")
+            instructions.append("Use these team IDs when updating Jira ticket 'Team' fields.")
 
-            if "team_id_map" in config:
-                instructions.append("")
-                instructions.append("TEAM_ID_MAP (Jira Team Field IDs):")
-                instructions.append("```json")
-                instructions.append(json.dumps(config["team_id_map"], indent=2))
-                instructions.append("```")
-                instructions.append("Use these team IDs when updating Jira ticket 'Team' fields.")
+        if "team_assignee_map" in config:
+            instructions.append("")
+            instructions.append("TEAM_ASSIGNEE_MAP:")
+            instructions.append("```json")
+            instructions.append(json.dumps(config["team_assignee_map"], indent=2))
+            instructions.append("```")
 
-            if "team_assignee_map" in config:
-                instructions.append("")
-                instructions.append("TEAM_ASSIGNEE_MAP:")
-                instructions.append("```json")
-                instructions.append(json.dumps(config["team_assignee_map"], indent=2))
-                instructions.append("```")
-
-            if "jira_filter" in config:
-                instructions.append("")
-                instructions.append(f"DEFAULT_JQL_FILTER: {config['jira_filter']}")
+        if "jira_filter" in config:
+            instructions.append("")
+            instructions.append(f"DEFAULT_JQL_FILTER: {config['jira_filter']}")
 
         return instructions
 

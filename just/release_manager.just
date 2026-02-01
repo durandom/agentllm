@@ -44,6 +44,7 @@ _scenarios := '
 #   just rm-test all          # Run all scenarios (Google Drive)
 #   just rm-test 5            # Run scenario 5 (Google Drive)
 #   just rm-test 5 --local-sheets  # Run scenario 5 with local CSV sheets
+#   just rm-test 5 --log      # Run scenario 5 with markdown logging
 #   just rm-test level-1      # Run all Level 1 scenarios
 rm-test *ARGS:
     #!/usr/bin/env bash
@@ -52,11 +53,19 @@ rm-test *ARGS:
     # Parse arguments
     scenario=""
     use_local_sheets=false
+    enable_logging=false
+    model_override=""
 
     for arg in {{ ARGS }}; do
         case "$arg" in
             --local-sheets|--local)
                 use_local_sheets=true
+                ;;
+            --log|--logs)
+                enable_logging=true
+                ;;
+            --model=*)
+                model_override="${arg#*=}"
                 ;;
             list|help)
                 scenario="list"
@@ -78,6 +87,8 @@ rm-test *ARGS:
                 echo "  just rm-test all            # Run all scenarios"
                 echo "  just rm-test 5              # Run scenario 5"
                 echo "  just rm-test 5 --local-sheets  # Use local CSV sheets"
+                echo "  just rm-test 5 --log        # Run with markdown logging"
+                echo "  just rm-test 5 --model=gemini-2.5-flash  # Use specific model"
                 echo "  just rm-test level-1        # Run all Level 1 scenarios"
                 exit 1
                 ;;
@@ -122,11 +133,24 @@ rm-test *ARGS:
         echo "  just rm-test all            # Run all scenarios"
         echo "  just rm-test 5              # Run scenario 5"
         echo "  just rm-test 5 --local-sheets  # Use local CSV sheets"
+        echo "  just rm-test 5 --log        # Run with markdown logging (tmp/scenario_logs/)"
+        echo "  just rm-test 5 --model=gemini-2.5-flash  # Use specific model"
         echo "  just rm-test level-1        # Run all Level 1 scenarios"
+        echo "  just rm-test all --log      # Run all scenarios with logging"
         echo ""
         echo "Workbook Sources:"
         echo "  Default:        Google Drive (requires OAuth + RELEASE_MANAGER_WORKBOOK_GDRIVE_URL)"
         echo "  --local-sheets: Local CSV files (exports/release manager_sheets/)"
+        echo ""
+        echo "Models:"
+        echo "  Default:               gemini-3-pro-preview (best for complex reasoning)"
+        echo "  --model=<name>:        Override model (e.g., gemini-2.5-flash for speed)"
+        echo "  Available models:      gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash"
+        echo ""
+        echo "Logging:"
+        echo "  Default:  No markdown logs (faster)"
+        echo "  --log:    Generate markdown logs in tmp/scenario_logs/"
+        echo "            Includes: reasoning, tool calls, validation, metrics"
         echo ""
         echo "================================================================================"
         echo ""
@@ -185,6 +209,26 @@ rm-test *ARGS:
         echo "   (requires OAuth + RELEASE_MANAGER_WORKBOOK_GDRIVE_URL env var)"
     fi
 
+    # Display logging status
+    if [ "$enable_logging" = true ]; then
+        echo "📝 Markdown Logging: ENABLED"
+        echo "   (logs will be saved to tmp/scenario_logs/)"
+        export RELEASE_MANAGER_SCENARIO_LOGS=true
+    else
+        echo "📝 Markdown Logging: DISABLED"
+        echo "   (use --log to enable)"
+    fi
+
+    # Display and set model override
+    if [ -n "$model_override" ]; then
+        echo "🤖 Model Override: $model_override"
+        echo "   (via RELEASE_MANAGER_MODEL env var)"
+        export RELEASE_MANAGER_MODEL="$model_override"
+    else
+        echo "🤖 Model: gemini-3-pro-preview (default)"
+        echo "   (use --model=<name> to override)"
+    fi
+
     echo ""
     echo "================================================================================"
     echo ""
@@ -203,3 +247,45 @@ rm-test-all:
 # Run all Release Manager scenarios with local CSV sheets
 rm-test-all-local:
     @just rm-test all --local-sheets
+
+# Run Release Manager scenario with markdown logging enabled
+# Usage: just rm-test-log 5
+rm-test-log SCENARIO *ARGS:
+    @just rm-test {{ SCENARIO }} --log {{ ARGS }}
+
+# Run all scenarios with markdown logging enabled
+rm-test-all-log:
+    @just rm-test all --log
+
+# Run Level 1 scenarios with markdown logging enabled
+rm-test-level1-log:
+    @just rm-test level-1 --log
+
+# View scenario logs index
+rm-logs:
+    #!/usr/bin/env bash
+    if [ -f tmp/scenario_logs/index.md ]; then
+        cat tmp/scenario_logs/index.md
+    else
+        echo "❌ No scenario logs found."
+        echo "   Run tests with --log flag to generate logs."
+        echo ""
+        echo "Example:"
+        echo "  just rm-test 5 --log"
+    fi
+
+# View specific scenario log
+# Usage: just rm-log L1_01
+rm-log LOG_ID:
+    #!/usr/bin/env bash
+    log_file="tmp/scenario_logs/{{ LOG_ID }}_*.md"
+    # Use glob to find matching file
+    found=$(ls $log_file 2>/dev/null | head -1)
+    if [ -n "$found" ]; then
+        cat "$found"
+    else
+        echo "❌ Log file not found: {{ LOG_ID }}"
+        echo ""
+        echo "Available logs:"
+        ls tmp/scenario_logs/L*.md 2>/dev/null || echo "  (none)"
+    fi

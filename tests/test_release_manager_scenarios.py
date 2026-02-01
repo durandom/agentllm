@@ -349,6 +349,407 @@ def get_configured_user_id() -> str | None:
         return None
 
 
+# Markdown logging helper functions
+def truncate_string(text: str, max_length: int) -> str:
+    """Truncate a string to max_length with '...' suffix if needed.
+
+    Args:
+        text: String to truncate
+        max_length: Maximum length before truncation
+
+    Returns:
+        Truncated string with '... (truncated, full length: N chars)' if over limit
+    """
+    if len(text) <= max_length:
+        return text
+    return f"{text[:max_length]}\n... (truncated, full length: {len(text)} chars)"
+
+
+def format_tool_call(tool, index: int) -> str:
+    """Format a single tool call as markdown with expandable details.
+
+    Args:
+        tool: ToolExecution object from Agno
+        index: Tool call number (1-based)
+
+    Returns:
+        Formatted markdown string with tool call details
+    """
+    # Check for error status
+    has_error = hasattr(tool, "tool_call_error") and tool.tool_call_error
+    status = "❌ Error" if has_error else "✅ Success"
+
+    md = [f"<details open>\n<summary>🔧 Tool Call {index}: {getattr(tool, 'tool_name', 'Unknown')}</summary>\n\n"]
+    md.append(f"**Tool Call ID**: `{getattr(tool, 'tool_call_id', 'N/A')}`  \n")
+    md.append(f"**Status**: {status}\n\n")
+
+    # Arguments
+    md.append("#### Arguments\n\n")
+    if hasattr(tool, "tool_args") and tool.tool_args:
+        args_json = json.dumps(tool.tool_args, indent=2, ensure_ascii=False)
+        md.append(f"```json\n{truncate_string(args_json, 2000)}\n```\n\n")
+    else:
+        md.append("_No arguments_\n\n")
+
+    # Result (truncate if > 1000 chars)
+    md.append("#### Result\n\n")
+    if hasattr(tool, "result") and tool.result:
+        result_text = str(tool.result)
+        if len(result_text) > 1000:
+            md.append(f"```text\n{result_text[:1000]}\n... (truncated, full result: {len(result_text)} chars)\n```\n\n")
+        else:
+            md.append(f"```text\n{result_text}\n```\n\n")
+    else:
+        md.append("_No result_\n\n")
+
+    # Error details if present
+    if has_error:
+        md.append("#### Error\n\n")
+        md.append(f"```text\n{getattr(tool, 'tool_call_error', 'Unknown error')}\n```\n\n")
+
+    md.append("</details>")
+    return "".join(md)
+
+
+def generate_scenario_markdown(
+    scenario: dict,
+    response,
+    validation_messages: list[str],
+    start_time: float,
+    end_time: float,
+    status: str,
+) -> str:
+    """Generate complete markdown log for a scenario test.
+
+    Args:
+        scenario: Test scenario dictionary
+        response: Agno RunOutput object
+        validation_messages: List of validation result messages
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        status: Test status (PASSED, PARTIAL, FAILED)
+
+    Returns:
+        Complete markdown content for the scenario log
+    """
+
+    md = []
+
+    # Header with status badge
+    status_emoji = {"PASSED": "✅", "PARTIAL": "⚠️", "FAILED": "❌"}.get(status, "❓")
+    duration = end_time - start_time
+
+    md.append(f"# {status_emoji} {scenario['category']}\n\n")
+    md.append(f"**Status**: {status}  \n")
+    md.append(f"**Timestamp**: {datetime.fromtimestamp(start_time).isoformat()}  \n")
+    md.append(f"**Duration**: {duration:.2f}s\n\n")
+
+    # Metadata section
+    md.append("## Metadata\n\n")
+    md.append(f"- **Level**: {scenario['level']}\n")
+    md.append(f"- **ID**: {scenario['id']}\n")
+    md.append(f"- **Category**: {scenario['category']}\n")
+    md.append(f"- **Knowledge Type**: {scenario['knowledge_type']}\n")
+    md.append(f"- **Description**: {scenario['description']}\n\n")
+
+    # Question
+    md.append("## Question\n\n")
+    md.append(f"```\n{scenario['question']}\n```\n\n")
+
+    # Execution Trace
+    md.append("## Execution Trace\n\n")
+
+    # Reasoning (collapsed for verbosity)
+    md.append("### Reasoning\n\n")
+    if hasattr(response, "reasoning_content") and response.reasoning_content:
+        md.append("<details>\n<summary>View reasoning steps</summary>\n\n")
+        md.append(f"```text\n{truncate_string(str(response.reasoning_content), 5000)}\n```\n\n")
+        md.append("</details>\n\n")
+    elif hasattr(response, "reasoning_steps") and response.reasoning_steps:
+        md.append("<details>\n<summary>View reasoning steps</summary>\n\n")
+        for i, step in enumerate(response.reasoning_steps, 1):
+            md.append(f"**Step {i}**:\n```text\n{truncate_string(str(step), 1000)}\n```\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No reasoning information available_\n\n")
+
+    # Tool Calls (expanded for visibility)
+    md.append("### Tool Calls\n\n")
+    if hasattr(response, "tools") and response.tools:
+        for i, tool in enumerate(response.tools, 1):
+            md.append(format_tool_call(tool, i))
+            md.append("\n\n")
+    else:
+        md.append("_No tools called_\n\n")
+
+    # Response
+    md.append("## Response\n\n")
+    content = str(response.content) if hasattr(response, "content") else str(response)
+    md.append(f"```markdown\n{truncate_string(content, 5000)}\n```\n\n")
+
+    # Response metadata
+    md.append("### Response Metadata\n\n")
+    if hasattr(response, "model"):
+        md.append(f"- **Model**: {response.model}\n")
+    if hasattr(response, "provider"):
+        md.append(f"- **Provider**: {response.provider}\n")
+    md.append("\n")
+
+    # Validation Results
+    md.append("## Validation Results\n\n")
+    passed = sum(1 for msg in validation_messages if "✅" in msg)
+    partial = sum(1 for msg in validation_messages if "⚠️" in msg)
+    failed = sum(1 for msg in validation_messages if "❌" in msg)
+    md.append(f"**Summary**: {passed} passed, {partial} warnings, {failed} failed\n\n")
+    for msg in validation_messages:
+        md.append(f"- {msg}\n")
+    md.append("\n")
+
+    # Metrics
+    md.append("## Metrics\n\n")
+    md.append(f"- **Duration**: {duration:.2f}s\n")
+    md.append(f"- **Response Length**: {len(content)} chars\n")
+
+    # Token counts if available
+    if hasattr(response, "metrics"):
+        metrics = response.metrics
+        if hasattr(metrics, "input_tokens"):
+            md.append(f"- **Input Tokens**: {metrics.input_tokens}\n")
+        if hasattr(metrics, "output_tokens"):
+            md.append(f"- **Output Tokens**: {metrics.output_tokens}\n")
+        if hasattr(metrics, "total_tokens"):
+            md.append(f"- **Total Tokens**: {metrics.total_tokens}\n")
+
+    md.append("\n")
+
+    # Messages (collapsed)
+    md.append("## Messages\n\n")
+    if hasattr(response, "messages") and response.messages:
+        md.append("<details>\n<summary>View full conversation history</summary>\n\n")
+        for i, msg in enumerate(response.messages, 1):
+            role = getattr(msg, "role", "unknown")
+            msg_content = str(getattr(msg, "content", ""))
+            md.append(f"**Message {i} ({role})**:\n```text\n{truncate_string(msg_content, 1000)}\n```\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No message history available_\n\n")
+
+    # Events (collapsed)
+    md.append("## Events\n\n")
+    if hasattr(response, "events") and response.events:
+        md.append("<details>\n<summary>View execution event trace</summary>\n\n")
+        md.append(f"**Total Events**: {len(response.events)}\n\n")
+        for i, event in enumerate(response.events[:50], 1):  # Limit to first 50 events
+            md.append(f"**Event {i}**: {truncate_string(str(event), 500)}\n\n")
+        if len(response.events) > 50:
+            md.append(f"_... and {len(response.events) - 50} more events_\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No event trace available_\n\n")
+
+    return "".join(md)
+
+
+def save_scenario_log(scenario: dict, markdown_content: str) -> Path | None:
+    """Save scenario markdown log to file if RELEASE_MANAGER_SCENARIO_LOGS is enabled.
+
+    Args:
+        scenario: Test scenario dictionary
+        markdown_content: Generated markdown content
+
+    Returns:
+        Path to saved log file, or None if logging is disabled
+    """
+    # Check if logging is enabled
+    if os.getenv("RELEASE_MANAGER_SCENARIO_LOGS", "").lower() not in ("true", "1", "yes"):
+        return None
+
+    log_dir = Path("tmp/scenario_logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate filename matching pytest ID format
+    level = scenario["level"]
+    scenario_id = scenario["id"]
+    category = scenario["category"].lower().replace(" ", "_").replace("-", "_")
+    filename = f"L{level}_{scenario_id:02d}_{category}.md"
+
+    log_path = log_dir / filename
+    log_path.write_text(markdown_content, encoding="utf-8")
+
+    # Auto-generate index.md
+    index_content = generate_index_markdown(log_dir)
+    index_path = log_dir / "index.md"
+    index_path.write_text(index_content, encoding="utf-8")
+
+    return log_path
+
+
+def generate_index_markdown(log_dir: Path) -> str:
+    """Generate index.md with summary table of all scenario logs.
+
+    Args:
+        log_dir: Directory containing scenario log files
+
+    Returns:
+        Markdown content for index file
+    """
+    md = []
+    md.append("# Release Manager Scenario Test Logs\n\n")
+    md.append(f"**Generated**: {datetime.now().isoformat()}\n\n")
+
+    # Find all log files (not index.md, not comprehensive dirs)
+    log_files = sorted(log_dir.glob("L*.md"))
+
+    if not log_files:
+        md.append("_No scenario logs found_\n")
+        return "".join(md)
+
+    md.append("## Summary\n\n")
+    md.append(f"**Total Scenarios**: {len(log_files)}\n\n")
+
+    # Table
+    md.append("| Level | ID | Category | Status | Duration |\n")
+    md.append("|-------|----|---------:|--------|----------|\n")
+
+    for log_file in log_files:
+        # Parse the first few lines to get status and duration
+        try:
+            content = log_file.read_text(encoding="utf-8")
+            lines = content.split("\n")
+
+            # Extract level and ID from filename
+            filename = log_file.stem
+            parts = filename.split("_")
+            level = parts[0][1:]  # Remove 'L' prefix
+            scenario_id = parts[1]
+
+            # Extract status from first line
+            status = "UNKNOWN"
+            if "✅" in lines[0]:
+                status = "✅ PASSED"
+            elif "⚠️" in lines[0]:
+                status = "⚠️ PARTIAL"
+            elif "❌" in lines[0]:
+                status = "❌ FAILED"
+
+            # Extract category from first line
+            category = lines[0].replace("#", "").replace("✅", "").replace("⚠️", "").replace("❌", "").strip()
+
+            # Extract duration
+            duration = "N/A"
+            for line in lines[:10]:
+                if "**Duration**:" in line:
+                    duration = line.split("**Duration**:")[1].strip()
+                    break
+
+            md.append(f"| {level} | {scenario_id} | [{category}]({log_file.name}) | {status} | {duration} |\n")
+
+        except Exception:
+            # If parsing fails, just list the file
+            md.append(f"| ? | ? | [{log_file.name}]({log_file.name}) | ? | ? |\n")
+
+    md.append("\n")
+
+    # Comprehensive test links
+    comprehensive_dirs = sorted([d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("comprehensive_")])
+    if comprehensive_dirs:
+        md.append("## Comprehensive Test Runs\n\n")
+        for comp_dir in comprehensive_dirs:
+            timestamp = comp_dir.name.replace("comprehensive_", "")
+            summary_file = comp_dir / "comprehensive_summary.md"
+            if summary_file.exists():
+                md.append(f"- [{timestamp}]({comp_dir.name}/comprehensive_summary.md)\n")
+            else:
+                md.append(f"- {timestamp} (no summary)\n")
+        md.append("\n")
+
+    return "".join(md)
+
+
+def generate_comprehensive_summary(results: list[dict], log_dir: Path) -> str:
+    """Generate comprehensive test summary markdown.
+
+    Args:
+        results: List of test result dictionaries
+        log_dir: Directory where comprehensive logs are saved
+
+    Returns:
+        Markdown content for comprehensive summary
+    """
+    md = []
+
+    # Extract timestamp from log_dir name
+    timestamp = log_dir.name.replace("comprehensive_", "")
+
+    md.append(f"# Comprehensive Test Summary - {timestamp}\n\n")
+    md.append(f"**Generated**: {datetime.now().isoformat()}\n\n")
+
+    # Summary stats
+    total = len(results)
+    passed = sum(1 for r in results if r["status"] == "PASSED")
+    partial = sum(1 for r in results if r["status"] == "PARTIAL")
+    failed = sum(1 for r in results if r["status"] == "FAILED")
+
+    md.append("## Summary\n\n")
+    md.append(f"- **Total Scenarios**: {total}\n")
+    md.append(f"- **✅ Passed**: {passed} ({passed / total * 100:.1f}%)\n")
+    md.append(f"- **⚠️ Partial**: {partial} ({partial / total * 100:.1f}%)\n")
+    md.append(f"- **❌ Failed**: {failed} ({failed / total * 100:.1f}%)\n\n")
+
+    # Results by level
+    md.append("## Results by Level\n\n")
+    levels = {}
+    for r in results:
+        # Extract level from description (format: "L{level}: ...")
+        level_match = r["description"].split(":")[0].strip()
+        if level_match not in levels:
+            levels[level_match] = {"total": 0, "passed": 0, "partial": 0, "failed": 0}
+        levels[level_match]["total"] += 1
+        if r["status"] == "PASSED":
+            levels[level_match]["passed"] += 1
+        elif r["status"] == "PARTIAL":
+            levels[level_match]["partial"] += 1
+        elif r["status"] == "FAILED":
+            levels[level_match]["failed"] += 1
+
+    for level in sorted(levels.keys()):
+        stats = levels[level]
+        md.append(f"### {level}\n\n")
+        md.append(f"- Total: {stats['total']}\n")
+        md.append(f"- ✅ Passed: {stats['passed']}\n")
+        md.append(f"- ⚠️ Partial: {stats['partial']}\n")
+        md.append(f"- ❌ Failed: {stats['failed']}\n\n")
+
+    # Detailed results table
+    md.append("## Detailed Results\n\n")
+    md.append("| ID | Category | Status | Keywords | Response Length |\n")
+    md.append("|----|----------|--------|----------|----------------:|\n")
+
+    for r in results:
+        status_emoji = {"PASSED": "✅", "PARTIAL": "⚠️", "FAILED": "❌"}.get(r["status"], "❓")
+        keywords = ", ".join(r.get("found_keywords", []))[:40]
+        log_file = f"L{r.get('level', '?')}_{r['id']:02d}_{r['category'].lower().replace(' ', '_').replace('-', '_')}.md"
+        md.append(f"| {r['id']} | [{r['category']}]({log_file}) | {status_emoji} {r['status']} | {keywords} | {r['response_length']} |\n")
+
+    md.append("\n")
+
+    # Failed scenarios (if any)
+    if failed > 0:
+        md.append("## Failed Scenarios\n\n")
+        for r in results:
+            if r["status"] == "FAILED":
+                md.append(f"### {r['id']}: {r['category']}\n\n")
+                md.append(f"**Question**: {r['question']}\n\n")
+                if "error" in r:
+                    md.append(f"**Error**: {r['error']}\n\n")
+                md.append("**Validation Results**:\n")
+                for v in r.get("validation", []):
+                    md.append(f"- {v}\n")
+                md.append("\n")
+
+    return "".join(md)
+
+
 # Test fixtures
 @pytest.fixture
 def shared_db() -> SqliteDb:
@@ -485,12 +886,22 @@ class TestReleaseManagerScenarios:
         print(f"Question: {question}")
         print(f"{'-' * 80}\n")
 
+        # Add timing
+        import time
+
+        start_time = time.time()
+
         # Run the query using the configured user ID
         response = configured_agent.run(question, user_id=configured_user_id)
+
+        end_time = time.time()
+
         content = str(response.content) if hasattr(response, "content") else str(response)
 
-        # Validation
+        # Validation (collect all validation results before asserting)
         validation_messages = []
+        validation_failed = False
+        failure_message = None
 
         # Log response length (no assertion - concise answers are good!)
         validation_messages.append(f"✅ Response length: {len(content)} chars")
@@ -498,8 +909,12 @@ class TestReleaseManagerScenarios:
         # Check for expected keywords
         content_lower = content.lower()
         found_keywords = [kw for kw in expected_keywords if kw.lower() in content_lower]
-        assert found_keywords, f"Missing expected keywords: {expected_keywords}"
-        validation_messages.append(f"✅ Found keywords: {found_keywords}")
+        if found_keywords:
+            validation_messages.append(f"✅ Found keywords: {found_keywords}")
+        else:
+            validation_messages.append(f"❌ Missing expected keywords: {expected_keywords}")
+            validation_failed = True
+            failure_message = f"Missing expected keywords: {expected_keywords}"
 
         # Check for source citations (for knowledge-based queries)
         if should_cite:
@@ -651,9 +1066,10 @@ class TestReleaseManagerScenarios:
                                 break
 
                         if reported_count is None:
-                            validation_messages.append("⚠️  Could not extract count from agent response")
+                            validation_messages.append("❌ Could not extract count from agent response")
                             print("  Could not extract count from response")
-                            raise AssertionError("Failed to extract count from agent response for count accuracy validation")
+                            validation_failed = True
+                            failure_message = "Failed to extract count from agent response for count accuracy validation"
                         else:
                             print(f"  Agent reported count: {reported_count}")
 
@@ -668,7 +1084,8 @@ class TestReleaseManagerScenarios:
                                     f"  ❌ INACCURATE: Agent reported {reported_count} but actual is {actual_count} (off by {abs(reported_count - actual_count)})"
                                 )
                                 # This is a hard failure for count accuracy tests
-                                raise AssertionError(f"Count mismatch: agent reported {reported_count} but Jira has {actual_count}")
+                                validation_failed = True
+                                failure_message = f"Count mismatch: agent reported {reported_count} but Jira has {actual_count}"
 
             except Exception as e:
                 validation_messages.append(f"⚠️  Count validation error: {str(e)}")
@@ -683,9 +1100,43 @@ class TestReleaseManagerScenarios:
         print("\n📄 Response Preview:")
         preview = content[:500] + "..." if len(content) > 500 else content
         print(preview)
+
+        # Determine status before final assertion
+        status = (
+            "PASSED"
+            if all("✅" in msg for msg in validation_messages)
+            else "PARTIAL"
+            if any("✅" in msg for msg in validation_messages)
+            else "FAILED"
+        )
+
+        # Generate and save markdown log BEFORE asserting
+        markdown_content = generate_scenario_markdown(
+            scenario=scenario,
+            response=response,
+            validation_messages=validation_messages,
+            start_time=start_time,
+            end_time=end_time,
+            status=status,
+        )
+
+        log_path = save_scenario_log(scenario, markdown_content)
+        if log_path:
+            print(f"\n📝 Scenario log saved to: {log_path}")
+
+        # Now assert after logging is complete
         print(f"\n{'=' * 80}")
-        print("✅ SCENARIO PASSED")
+        if status == "PASSED":
+            print("✅ SCENARIO PASSED")
+        elif status == "PARTIAL":
+            print("⚠️  SCENARIO PARTIAL")
+        else:
+            print("❌ SCENARIO FAILED")
         print(f"{'=' * 80}\n")
+
+        # Raise assertion error if validation failed
+        if validation_failed:
+            raise AssertionError(failure_message)
 
     @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
     def test_comprehensive_scenarios(self, configured_agent, configured_user_id):
@@ -708,6 +1159,17 @@ class TestReleaseManagerScenarios:
         print(f"Total Scenarios: {total}")
         print(f"{'=' * 80}\n")
 
+        # Check if logging is enabled
+        logging_enabled = os.getenv("RELEASE_MANAGER_SCENARIO_LOGS", "").lower() in ("true", "1", "yes")
+
+        if logging_enabled:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = Path(f"tmp/scenario_logs/comprehensive_{timestamp}")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            print(f"📁 Logging enabled: {log_dir}\n")
+        else:
+            log_dir = None
+
         for scenario in TEST_SCENARIOS:
             scenario_id = scenario["id"]
             category = scenario["category"]
@@ -722,6 +1184,7 @@ class TestReleaseManagerScenarios:
 
             result = {
                 "id": scenario_id,
+                "level": scenario.get("level", 0),
                 "category": category,
                 "question": question,
                 "description": description,
@@ -732,8 +1195,16 @@ class TestReleaseManagerScenarios:
             }
 
             try:
+                # Add timing
+                import time
+
+                start_time = time.time()
+
                 # Run the query using the configured user ID
                 response = configured_agent.run(question, user_id=configured_user_id)
+
+                end_time = time.time()
+
                 content = str(response.content) if hasattr(response, "content") else str(response)
 
                 result["response_length"] = len(content)
@@ -800,11 +1271,41 @@ class TestReleaseManagerScenarios:
                 preview = content[:300] + "..." if len(content) > 300 else content
                 print(preview)
 
+                # Generate and save markdown log if enabled
+                if logging_enabled:
+                    markdown_content = generate_scenario_markdown(
+                        scenario=scenario,
+                        response=response,
+                        validation_messages=validation_results,
+                        start_time=start_time,
+                        end_time=end_time,
+                        status=result["status"],
+                    )
+
+                    # Save to comprehensive test directory
+                    level = scenario["level"]
+                    scenario_id = scenario["id"]
+                    category_slug = category.lower().replace(" ", "_").replace("-", "_")
+                    filename = f"L{level}_{scenario_id:02d}_{category_slug}.md"
+                    log_path = log_dir / filename
+                    log_path.write_text(markdown_content, encoding="utf-8")
+
             except Exception as e:
                 result["status"] = "FAILED"
                 result["error"] = str(e)
                 failed += 1
                 print(f"❌ Status: FAILED - {e}")
+
+                # Still log failures if enabled
+                if logging_enabled:
+                    # Create minimal error log
+                    error_md = f"# ❌ {category}\n\n**Status**: FAILED\n\n**Error**: {str(e)}\n\n**Question**: {question}\n"
+                    level = scenario.get("level", 0)
+                    scenario_id = scenario["id"]
+                    category_slug = category.lower().replace(" ", "_").replace("-", "_")
+                    filename = f"L{level}_{scenario_id:02d}_{category_slug}.md"
+                    log_path = log_dir / filename
+                    log_path.write_text(error_md, encoding="utf-8")
 
             results.append(result)
 
@@ -837,6 +1338,14 @@ class TestReleaseManagerScenarios:
             )
 
         print(f"\n📊 Detailed results saved to: {results_file}")
+
+        # Generate comprehensive summary if logging enabled
+        if logging_enabled:
+            summary_md = generate_comprehensive_summary(results, log_dir)
+            summary_path = log_dir / "comprehensive_summary.md"
+            summary_path.write_text(summary_md, encoding="utf-8")
+            print(f"📊 Comprehensive summary saved to: {summary_path}")
+
         print(f"{'=' * 80}\n")
 
         # Test passes if:

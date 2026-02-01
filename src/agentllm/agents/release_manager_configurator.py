@@ -78,13 +78,30 @@ class ReleaseManagerConfigurator(AgentConfigurator):
     def _get_model_id(self) -> str:
         """Get model ID for Release Manager.
 
+        Can be overridden via RELEASE_MANAGER_MODEL environment variable.
+
         For available Gemini models, see:
         https://ai.google.dev/gemini-api/docs/models/gemini
 
+        Available models:
+        - gemini-3-pro-preview (default, best for complex reasoning)
+        - gemini-2.5-pro (stable, production-ready)
+        - gemini-2.5-flash (faster, good for simple queries)
+
         Returns:
-            str: Model ID (gemini-2.5-pro for Gemini 2.5)
+            str: Model ID from env var or default (gemini-3-pro-preview)
         """
-        # return "gemini-2.5-pro"
+        import os
+
+        # Allow override via environment variable
+        model = os.getenv("RELEASE_MANAGER_MODEL")
+        if model:
+            from loguru import logger
+
+            logger.info(f"Using model from RELEASE_MANAGER_MODEL env var: {model}")
+            return model
+
+        # Default to Gemini 3 Pro Preview
         return "gemini-3-pro-preview"
 
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:

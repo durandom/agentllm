@@ -1,0 +1,61 @@
+name,description,input_required,data_sources,tools,output_format,instructions
+Retrieving Release and Key Dates,"Table of release versions with five critical dates: Feature Freeze, Code Freeze, Doc Freeze, Go/No Go, GA Announce",None (finds all active releases),Jira (jira list of active release query),get_issue(),Table with dates and source link per release,"1. Execute 'jira list of active release' query to find active release issues
+2. For each release issue, use get_issue() to retrieve full description
+3. Extract critical dates from description
+4. Format as table with release version and five dates
+5. Include source Jira link for traceability"
+Retrieving Future Release and Key Dates,Table of future release versions with critical dates from release schedule spreadsheet,None,RHDH release schedule spreadsheet,get_document_content(),Table with dates and source link,"1. Access RHDH release schedule spreadsheet (ID: 1knVzlMW0l0X4c7gkoiuaGql1zuFgEGwHHBsj-ygUTnc)
+2. Extract critical dates for future releases
+3. Format as table with release version and five dates
+4. Include spreadsheet link as source"
+Retrieve Active Release Status by Issue Type,Compile status of all active releases with open issue counts by type,None (finds all active releases),Jira (active release + open issues by type queries),get_issues_stats(),Table per release with issue type breakdown and links,"1. Execute 'jira list of active release' to get release versions
+2. For each release, query open issues by type (Feature, Epic, Story, Task, Sub-task, Bug, Vulnerability, Weakness)
+3. Use get_issues_stats() for each query
+4. Create table showing counts per type with Jira links
+5. Include total count across all types"
+Retrieve Teams and Leads,Structured list of all Active RHDH teams with leads and Slack handles,None,"RHDH Team Spreadsheet, Sheet: Team",get_document_content(),"Table with Category, Team Name, Team ID, Leads, Slack Handles","1. Access Team Value sheet in RHDH Team spreadsheet (ID: 1vQXfvID72qwqvLb17eyGOvnZXrZG7NBzTGv6RP9wvyM)
+2. Filter rows where Status = 'Active'
+3. Extract: Category, Team Name, Team ID, Leads, Slack Handles
+4. Format as structured table
+5. Include spreadsheet link"
+Retrieve Issues by Engineering Teams,Compile open issues for specific team ID,Target Team ID: {{TEAM_ID}},Jira with team filter,get_issues_by_team(),Summary format,"1. Follow 'Retrieve Teams and Leads' to get active teams
+2. Add 'AND team = {{TEAM_ID}}' to base query
+3. Use get_issues_by_team() for accurate counts
+4. Apply Summary format with total count and Jira link"
+Retrieve Blocker Bugs,Compile all open blocker bugs for a release,Target release version: {{RELEASE_VERSION}},Jira,get_issues_detailed(),Detailed format,"1. Use 'jira list of open issues' as base
+2. Add condition: 'AND issuetype=bug AND priority = blocker'
+3. Use get_issues_detailed() for full details
+4. Apply Detailed format with status, priority, assignee"
+Retrieve Engineering EPICs,Compile all open Engineering EPICs not in Dev Complete,Target release version: {{RELEASE_VERSION}},Jira (Jira list of epics query),get_issues_stats(),Summary format,"1. Execute 'Jira list of epics' query with {{RELEASE_VERSION}}
+2. Use get_issues_stats() for count
+3. Apply Summary format with total and link"
+Retrieve list of CVEs,Compile all CVE issues for a release,Target release version: {{RELEASE_VERSION}},Jira (Jira list of CVEs query),get_issues_detailed(),Detailed format,"1. Execute 'Jira list of CVEs' query with {{RELEASE_VERSION}}
+2. Use get_issues_detailed() for full CVE details
+3. Apply Detailed format with severity and status"
+Retrieve outstanding Release Notes,Compile features and bugs missing Release Note Type,Target release version: {{RELEASE_VERSION}},Jira (Jira list of release notes query),get_issues_stats(),Summary format,"1. Execute 'Jira list of release notes' query
+2. Use get_issues_stats() for count
+3. Apply Summary format with total and Jira link"
+Announce Feature Freeze Update,Slack message announcing Feature Freeze status update,Release version: {{RELEASE_VERSION}},"Jira (release issue, feature freeze query), Team spreadsheet","get_issue(), get_document_content(), get_issues_by_team()",Slack Markdown in code block,"1. Get Feature Freeze date from release issue
+2. Get active engineering teams from spreadsheet (Category=Engineering, Status=Active)
+3. Get outstanding release notes count
+4. Use get_issues_by_team() with 'jira list of feature freeze issues' as base_jql
+5. Fill Slack template with data
+6. Return in code block (triple backticks) for copy-paste"
+Announce Feature Freeze,Slack message announcing Feature Freeze milestone reached,Release version: {{RELEASE_VERSION}},"Jira (EPICs, CVEs, release notes queries)",get_issues_stats(),Slack Markdown in code block,"1. Get open EPICs count
+2. Get CVE issues count
+3. Get outstanding release notes count
+4. Fill Slack template with counts and links
+5. Return in code block for copy-paste"
+Announce Code Freeze Update,Slack message announcing Code Freeze status update,Release version: {{RELEASE_VERSION}},"Jira (release issue, code freeze query, feature subtasks), Team spreadsheet","get_issue(), get_document_content(), get_issues_by_team()",Slack Markdown in code block,"1. Get Code Freeze date from release issue
+2. Get active engineering teams
+3. Get outstanding release notes count
+4. Get feature subtasks count
+5. Use get_issues_by_team() with 'jira list of code freeze issues' as base_jql
+6. Fill Slack template
+7. Return in code block"
+Announce Code Freeze,Slack message announcing Code Freeze milestone reached,Release version: {{RELEASE_VERSION}},"Jira (blocker bugs, feature demos, test day, open issues)","get_issues_detailed(), get_issues_stats()",Slack Markdown in code block,"1. Retrieve blocker bugs (detailed)
+2. Retrieve feature demos count
+3. Retrieve test day features count
+4. Retrieve total open issues count
+5. Fill Slack template with counts and links
+6. Return in code block"

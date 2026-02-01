@@ -15,6 +15,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Import modules
 import? 'just/dev.just'
 import? 'just/container.just'
+import? 'just/release_manager.just'
 
 # Project paths
 export REPO_ROOT := justfile_directory()

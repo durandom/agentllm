@@ -134,10 +134,7 @@ class JiraConfig(BaseToolkitConfig):
                 return True
 
         # Fall back to legacy in-memory storage
-        if (
-            user_id in self._user_configs
-            and "jira_token" in self._user_configs[user_id]
-        ):
+        if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
             return True
 
         return False
@@ -184,9 +181,7 @@ class JiraConfig(BaseToolkitConfig):
             success, validation_message = toolkit.validate_connection()
 
             if not success:
-                logger.error(
-                    f"Jira token validation failed for user {user_id}: {validation_message}"
-                )
+                logger.error(f"Jira token validation failed for user {user_id}: {validation_message}")
                 raise ValueError(f"Invalid Jira token: {validation_message}")
 
             logger.info(f"Jira token validated successfully for user {user_id}")
@@ -211,7 +206,9 @@ class JiraConfig(BaseToolkitConfig):
             self._jira_toolkits[user_id] = toolkit
 
             # Return confirmation with validation message
-            return f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
+            return (
+                f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
+            )
 
         except Exception as e:
             logger.error(f"Failed to validate Jira token for user {user_id}: {e}")
@@ -297,10 +294,7 @@ class JiraConfig(BaseToolkitConfig):
                 return None
         else:
             # Use legacy in-memory authentication
-            if (
-                user_id in self._user_configs
-                and "jira_token" in self._user_configs[user_id]
-            ):
+            if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
                 token = self._user_configs[user_id]["jira_token"]
                 toolkit = JiraTools(
                     token=token,
@@ -360,6 +354,29 @@ class JiraConfig(BaseToolkitConfig):
         """
         return config_name == "jira_token"
 
+    def _extract_tool_use_when(self, user_id: str) -> dict[str, str]:
+        """Extract 'Use When' guidance from JiraTools docstrings.
+
+        Returns:
+            Dict mapping tool name to first 'Use When' bullet point
+            (for concise system prompt overview)
+        """
+        import re
+
+        toolkit = self.get_toolkit(user_id)
+        if not toolkit:
+            return {}
+
+        use_when_map = {}
+        for tool_func in toolkit.tools:
+            if hasattr(tool_func, "__doc__") and tool_func.__doc__:
+                # Extract first bullet from "Use When:" section
+                match = re.search(r"\*\*Use When:\*\*\s*\n\s*-\s*(.+)", tool_func.__doc__)
+                if match:
+                    use_when_map[tool_func.__name__] = match.group(1).strip()
+
+        return use_when_map
+
     def get_agent_instructions(self, user_id: str) -> list[str]:
         """Get JIRA-specific agent instructions.
 
@@ -369,12 +386,79 @@ class JiraConfig(BaseToolkitConfig):
         Returns:
             List of instruction strings
         """
-        if self.get_toolkit(user_id):
-            return [
-                f"You have access to JIRA tools to search issues and get issue details "
-                f"from {self._jira_server}. Use these tools when users ask about JIRA issues."
+        if not self.get_toolkit(user_id):
+            return []
+
+        # Extract "Use When" from tool docstrings
+        tool_guidance = self._extract_tool_use_when(user_id)
+
+        instructions = [
+            "## Jira Tool Selection Guide",
+            "",
+            "**CRITICAL**: Choose the RIGHT tool to avoid wasting resources:",
+            "",
+            "### For Count/Statistics Queries:",
+            "- **Questions like 'How many...?', 'Count of...', 'Total...'** → ALWAYS use `get_issues_stats()`",
+            "- DO NOT use `get_issues_detailed()` or `get_issues_summary()` for counting",
+            "- `get_issues_stats()` returns ONLY counts (no issue data) - fast and efficient",
+            "",
+            "### For Other Queries:",
+        ]
+
+        # Dynamically build guide from docstrings (no hardcoding!)
+        tool_categories = [
+            ("get_issues_summary", "Basic listings"),
+            ("get_issues_detailed", "Custom field queries"),
+            ("get_issue", "Single issue details"),
+            ("get_issues_by_team", "Team breakdowns"),
+            ("get_fix_versions", "Extract versions"),
+            ("extract_sprint_info", "Sprint info"),
+            ("get_sprint_metrics", "Sprint statistics"),
+        ]
+
+        for tool_name, category in tool_categories:
+            if tool_name in tool_guidance:
+                instructions.append(f"- **{category}**: Use `{tool_name}()` - {tool_guidance[tool_name]}")
+
+        instructions.extend(
+            [
+                "",
+                "## Jira Tool Usage",
+                f"You have access to Jira tools for {self._jira_server}",
+                "",
+                "### Pagination Guidance (CRITICAL):",
+                "- Most Jira tools return SAMPLES of issues (default: 50, max: 1000 per query)",
+                "- ALWAYS check 'summary.total_count' for accurate totals - it's ALWAYS correct",
+                "- The 'summary.has_more' field indicates if there are more results beyond what was returned",
+                "- Breakdown stats ('by_type', 'by_status', 'by_priority') are SAMPLE-BASED when has_more=true",
+                "",
             ]
-        return []
+        )
+
+        # Add team breakdown guidance if tool is enabled
+        if self._tool_config.get("get_issues_by_team"):
+            instructions.extend(
+                [
+                    "### Team Breakdowns (REQUIRED):",
+                    "- DO NOT count teams from get_issues_detailed() or get_issues_summary() results",
+                    "- ALWAYS use get_issues_by_team(release_version, team_ids) for accurate team counts",
+                    "- This tool runs efficient count-only queries per team (no pagination issues)",
+                    "- Workflow: 1) Get team IDs from Google Drive team mapping, 2) Call get_issues_by_team()",
+                    "",
+                ]
+            )
+
+        # Add guidance for when to increase max_results
+        instructions.extend(
+            [
+                "### When to Increase max_results:",
+                "- When displaying issue lists to users (e.g., 'show me blockers'), use max_results=100-1000",
+                "- When you only need counts, use get_issues_stats() or get_issues_by_team() (no issue fetching)",
+                "- When you need ALL issues and total > 1000, you'll need multiple queries with pagination",
+            ]
+        )
+
+        return instructions
 
     # Private helper methods
 

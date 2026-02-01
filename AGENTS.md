@@ -11,8 +11,17 @@ Architecture: `[Client] -> [LiteLLM Proxy :9501 (external) / :8890 (internal)] -
 ## Common Commands
 
 ```bash
-# Testing
-pytest tests/                                  # Run all tests
+# Testing - Progressive Complexity Structure
+# Level 0: Toolkit Unit Tests (fast, no APIs)
+pytest tests/test_release_manager_toolkit.py -v              # < 1 second
+
+# Level 1-4: Integration Scenarios (with real APIs)
+pytest tests/test_release_manager_scenarios.py -v -m integration  # All scenarios
+pytest tests/test_release_manager_scenarios.py -k "L1" -v -m integration  # Level 1 only
+pytest tests/test_release_manager_scenarios.py -k "L1 or L2" -v -m integration  # L1 + L2
+pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario[L1_01_workbook___list_queries] -v -s -m integration  # Single scenario
+
+# Other tests
 pytest tests/test_custom_handler.py -v         # Specific test (-v auto-enables AGNO_DEBUG)
 pytest tests/ -v -s                            # Verbose + show output (AGNO_DEBUG=true)
 
@@ -468,6 +477,94 @@ Generates structured sprint review markdown with:
 - JIRA `get_sprint_metrics(sprint_id)` - Get sprint metrics (number of planned, closed, number of bugs vs tasks and stories)
 - JIRA `get_issue(issue_key)` - Get individual issue details
 
+### Release Manager (`agno/release-manager`)
+
+**Purpose**: AI assistant for managing Red Hat Developer Hub (RHDH) releases, including Y-stream and Z-stream releases, tracking progress, coordinating teams, and generating Slack announcements.
+
+**Architecture**: Uses **Excel workbook** stored in Google Sheets for structured configuration data (Jira queries, Slack templates, workflows). Workbook is downloaded and parsed on-demand.
+
+**Setup**:
+
+1. **Google Drive OAuth** (for workbook access):
+   - Requires `GDRIVE_CLIENT_ID` and `GDRIVE_CLIENT_SECRET` environment variables
+   - Agent will provide OAuth URL on first use
+   - Visit URL, authorize, and paste back the authorization code
+
+2. **JIRA API Token**:
+   - Go to https://issues.redhat.com
+   - Click profile icon → Account Settings → Security → API Tokens
+   - Create and copy token
+   - In chat: "My Jira token is YOUR_TOKEN_HERE"
+   - Agent validates and stores token securely
+
+3. **Release Manager Workbook** (required):
+   - Set `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` to Google Sheets URL
+   - Workbook must contain 7 required sheets (see `docs/templates/release_manager_sheet.md`)
+   - Must be shared with authenticated Google account
+
+**Workbook Structure** (7 Sheets):
+
+1. **Configuration & Setup** (Title Case columns): Core principles, project keys, version format
+2. **Tools Reference** (Title Case): Jira and Google Drive tool documentation
+3. **Response Formats** (Title Case): Standard output format specifications
+4. **Jira Queries** (snake_case columns): Reusable JQL query templates with `{{PLACEHOLDER}}` syntax
+5. **Actions & Workflows** (snake_case): Step-by-step workflow instructions
+6. **Slack Templates** (snake_case): Freeze announcement templates (copy-paste ready)
+7. **Maintenance Guide** (Title Case): Best practices, troubleshooting, prompt engineering principles
+
+**Key Convention**: Machine-readable sheets (4-6) use `lowercase_snake_case` headers; informational sheets (1-3, 7) use `Title Case` headers.
+
+**Usage Examples**:
+
+- "What Jira queries are available?"
+- "Show me the Feature Freeze announcement template"
+- "How do I create a sprint review?"
+- "Get the workflow for generating release notes"
+- "What's the JQL template for listing open issues by release?"
+
+**ReleaseManagerToolkit Methods**:
+
+- `get_jira_query_template(query_name)` - Get JQL template with description and example
+- `get_slack_template(template_name)` - Get Slack announcement template content
+- `get_workflow_instructions(action_name)` - Get step-by-step workflow
+- `get_project_config(category)` - Get configuration items by category
+- `get_tool_reference(tool_name)` - Get tool documentation
+- `get_response_format(format_name)` - Get response format specification
+- `list_available_queries()` - List all query names (helper, not exposed as tool)
+- `list_available_templates()` - List all template names (helper)
+- `list_available_workflows()` - List all workflow names (helper)
+
+**System Prompt Structure**:
+
+The agent's system prompt is built from:
+1. **Hardcoded core instructions** (stable, rarely changes)
+2. **Sheet 7 (Maintenance Guide)** (dynamic best practices)
+3. **Reference data** (available queries, templates, workflows)
+
+**Key Features**:
+
+- No manual system prompt editing - all configuration in structured workbook
+- Self-correcting error handling (toolkit methods list available items on failure)
+- Case-insensitive lookup for all query methods
+- Placeholder syntax: `{{RELEASE_VERSION}}`, `{{ISSUE_TYPE}}` (double curly braces)
+- In-memory workbook caching (per-user, instance-level)
+
+**Implementation Details**:
+
+- Toolkit: `ReleaseManagerToolkit` (`src/agentllm/tools/release_manager_toolkit.py`)
+- Configuration: `ReleaseManagerToolkitConfig` (`src/agentllm/agents/toolkit_configs/release_manager_toolkit_config.py`)
+- Configurator: `ReleaseManagerConfigurator` (`src/agentllm/agents/release_manager_configurator.py`)
+- Agent: `ReleaseManager` (`src/agentllm/agents/release_manager.py`)
+- Workbook download: `GoogleDriveExporter.export_all_sheets_as_dict()` (uses **Sheets API**, not Drive API)
+
+**Critical Implementation Note**: Google Drive API `files().export()` **only exports the first sheet**. Must use **Sheets API** (`spreadsheets().values().get()`) to export all sheets.
+
+**Environment Variables**:
+
+- `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` - Google Sheets URL (required)
+- `GDRIVE_CLIENT_ID` / `GDRIVE_CLIENT_SECRET` - OAuth credentials (required)
+- `GEMINI_API_KEY` - Gemini model API key (required)
+
 ## Key Files
 
 ```
@@ -480,13 +577,17 @@ src/agentllm/
 │   │   ├── configurator.py        #   AgentConfigurator (config management)
 │   │   ├── wrapper.py             #   BaseAgentWrapper (execution interface)
 │   │   └── toolkit_config.py      #   BaseToolkitConfig (re-export)
-│   ├── release_manager.py         # Production agent wrapper
+│   ├── release_manager.py         # Release Manager agent wrapper
+│   ├── release_manager_configurator.py  # Release Manager configurator
 │   ├── demo_agent.py              # Reference implementation
 │   ├── github_pr_prioritization_agent.py  # GitHub PR review agent
 │   └── toolkit_configs/           # Toolkit config implementations
-│       └── github_config.py       # GitHub token & toolkit config
+│       ├── github_config.py       # GitHub token & toolkit config
+│       └── release_manager_toolkit_config.py  # Release Manager workbook config
 ├── tools/
-│   └── github_toolkit.py          # GitHub PR review tools
+│   ├── github_toolkit.py          # GitHub PR review tools
+│   ├── release_manager_toolkit.py # Release Manager workbook query methods
+│   └── gdrive_utils.py            # Google Drive exporter (Sheets API support)
 └── db/token_storage.py            # SQLite credential storage
 ```
 
@@ -536,6 +637,60 @@ AGNO_DEBUG=true pytest tests/
 # Disable AGNO_DEBUG even in verbose mode
 AGNO_DEBUG=false pytest tests/ -v
 ```
+
+### Progressive Test Structure
+
+AgentLLM tests follow a **progressive complexity pyramid** for systematic debugging:
+
+**Level 0: Toolkit Unit Tests** (Foundation)
+- **File**: `tests/test_release_manager_toolkit.py`
+- **Speed**: < 1 second (no APIs, mock data only)
+- **Purpose**: Validate toolkit logic in isolation
+- **Coverage**: All 6 toolkit methods + helper methods + error handling
+- **Run**: `pytest tests/test_release_manager_toolkit.py -v`
+
+**Level 1-4: Integration Scenarios** (Agent + APIs)
+- **File**: `tests/test_release_manager_scenarios.py`
+- **Speed**: 30s - 5min (real Jira/GDrive APIs)
+- **Purpose**: Validate agent reasoning and tool coordination
+
+**Complexity Levels:**
+
+| Level | Focus | Example Scenarios | Validation |
+|-------|-------|-------------------|------------|
+| **L1** | Single-Toolkit | List queries, Get template, Simple count | Basic presence, keywords |
+| **L2** | Cross-Toolkit | JQL template application, Release status | Multi-source coordination |
+| **L3** | Workflows | Code freeze announcement, Team breakdown | Workflow structure, template filling |
+| **L4** | Advanced | Count accuracy, Risk analysis | Reasoning quality, recommendations |
+
+**Progressive Validation**: Each level builds on previous level checks. Level 4 includes all Level 1-3 validations plus advanced reasoning checks.
+
+**Test Selection Examples:**
+
+```bash
+# Level 0: Fast unit tests (always start here!)
+pytest tests/test_release_manager_toolkit.py -v
+
+# Level 1: Basic integration (single toolkit)
+pytest tests/test_release_manager_scenarios.py -k "L1" -v -m integration
+
+# Levels 1-2: Foundation + coordination
+pytest tests/test_release_manager_scenarios.py -k "L1 or L2" -v -m integration
+
+# Specific scenario
+pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario[L1_01_workbook___list_queries] -v -s -m integration
+
+# All integration tests
+pytest tests/test_release_manager_scenarios.py -v -m integration
+```
+
+**Debugging Strategy:**
+1. If Level 0 fails → Toolkit logic bug (fix in `release_manager_toolkit.py`)
+2. If Level 1 fails → Basic agent/toolkit integration issue
+3. If Level 2-3 fail → Agent reasoning or workflow logic
+4. If Level 4 fails → Advanced reasoning or accuracy issue
+
+**Best Practice**: Always run Level 0 first! If toolkit tests fail, higher levels are unreliable.
 
 ## Handling False Positive Leak Detection
 

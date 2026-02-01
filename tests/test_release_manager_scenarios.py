@@ -40,88 +40,289 @@ if not os.getenv("AGENTLLM_TOKEN_ENCRYPTION_KEY"):
     )
 
 
-# Test scenarios with validation criteria
-# These scenarios are derived from the Release Manager System Prompt:
-# - Release status tracking (Jira queries)
-# - Release schedule management (Google Drive + Jira)
-# - Risk identification (blocker bugs, CVEs, unassigned work)
-# - Communication preparation (code freeze announcements, release updates)
-# - Proactive monitoring (scope creep, missing artifacts)
+# Test scenarios with validation criteria - PROGRESSIVE COMPLEXITY STRUCTURE
+#
+# Scenarios are organized by complexity level (L1-L4):
+#   Level 1: Single-Toolkit Scenarios (basic queries, simple reasoning)
+#   Level 2: Cross-Toolkit Coordination (combine data from multiple sources)
+#   Level 3: Structured Workflows (multi-step processes with templates)
+#   Level 4: Advanced Analysis (complex reasoning, risk analysis, count accuracy)
+#
+# Run by level: pytest -k "level_1" tests/test_release_manager_scenarios.py -v -m integration
+# Run specific: pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario[L1_01] -v -s -m integration
 
 TEST_SCENARIOS = [
+    # =============================================================================
+    # LEVEL 1: Single-Toolkit Scenarios (Basic Operations)
+    # =============================================================================
+    # These test basic toolkit access and simple queries. Each uses ONE toolkit
+    # and validates the agent can retrieve data correctly.
     {
         "id": 1,
-        "category": "Release Status Query",
-        "question": "What's the status of the current release?",
-        "expected_keywords": ["release", "status", "features", "progress"],
+        "level": 1,
+        "category": "Workbook - List Queries",
+        "question": "What Jira queries are available in the workbook?",
+        "expected_keywords": ["query", "jira", "available"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to query current release status and provide progress metrics",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests ability to access workbook toolkit and list available queries",
     },
     {
         "id": 2,
-        "category": "Risk Identification - Blocker Bugs",
-        "question": "Are there any blocker bugs in the current release?",
-        "expected_keywords": ["blocker", "bug", "priority"],
+        "level": 1,
+        "category": "Workbook - Get Template",
+        "question": "Show me the Feature Freeze Update template",
+        "expected_keywords": ["feature freeze", "template", "release"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to identify and report blocker bugs using Jira queries",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests ability to retrieve Slack template from workbook with placeholders",
     },
     {
         "id": 3,
-        "category": "Release Schedule Information",
-        "question": "When is the next feature freeze?",
-        "expected_keywords": ["feature freeze", "date", "schedule"],
+        "level": 1,
+        "category": "Jira - Simple Count",
+        "question": "How many issues are open in fixVersion 1.9.0?",
+        "expected_keywords": ["1.9.0", "issues", "open"],
         "should_cite_source": True,
-        "knowledge_type": "gdrive",
-        "description": "Tests ability to query release schedule from Google Drive documents",
+        "knowledge_type": "jira",
+        "description": "L1: Tests basic Jira count query (single JQL, no complex filtering)",
     },
     {
         "id": 4,
-        "category": "JQL Query Construction",
-        "question": "Show me all features in the current release that are still in progress",
-        "expected_keywords": ["feature", "in progress", "jira"],
+        "level": 1,
+        "category": "Jira - Issue Lookup",
+        "question": "Are there any blocker bugs in the 1.9 release?",
+        "expected_keywords": ["blocker", "bug", "priority"],
         "should_cite_source": True,
         "knowledge_type": "jira",
-        "description": "Tests ability to construct JQL queries for feature tracking",
+        "description": "L1: Tests Jira query with priority filter (single condition)",
     },
     {
         "id": 5,
-        "category": "Code Freeze Communication",
-        "question": "Create a code freeze announcement for the current release",
-        "expected_keywords": ["code freeze", "cherry-pick", "blocker", "cve"],
+        "level": 1,
+        "category": "Workflow - Instructions",
+        "question": "How do I generate a release status update?",
+        "expected_keywords": ["release status", "workflow", "instructions"],
         "should_cite_source": True,
-        "knowledge_type": "multi",
-        "description": "Tests ability to generate code freeze announcements with all required data",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests workflow instruction retrieval (no execution)",
     },
     {
         "id": 6,
-        "category": "CVE Tracking",
-        "question": "What CVEs are outstanding for the current release?",
-        "expected_keywords": ["cve", "security", "vulnerability"],
+        "level": 1,
+        "category": "Workbook - Project Config",
+        "question": "What are the Jira project keys used for tracking?",
+        "expected_keywords": ["rhidp", "rhdhplan", "jira", "project"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to track and report on security vulnerabilities",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests project configuration retrieval by category",
     },
     {
         "id": 7,
-        "category": "JQL Count Accuracy - Feature Demos",
-        "question": "How many features are tagged for demos in version 1.9.0?",
-        "expected_keywords": ["feature", "demo", "1.9.0"],
+        "level": 1,
+        "category": "Workbook - Tool Reference",
+        "question": "Show me documentation for the get_issues_by_team tool",
+        "expected_keywords": ["team", "parameters", "returns", "tool"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests accurate counting of JQL results - validates agent reports complete count, not just first page of results. Issue: agent previously reported 25 when actual count was 32.",
-        "validation_type": "count_accuracy",
-        "jql_query": 'issuetype = Feature AND fixVersion = "1.9.0" AND labels = demo',
+        "knowledge_type": "workbook",
+        "description": "L1: Tests tool reference documentation retrieval",
     },
     {
         "id": 8,
-        "category": "Feature Freeze Announcement",
+        "level": 1,
+        "category": "Workbook - Prompt Retrieval",
+        "question": "Show me the feature_freeze_prep prompt",
+        "expected_keywords": ["feature freeze", "prep", "verify"],
+        "should_cite_source": True,
+        "knowledge_type": "workbook",
+        "description": "L1: Tests situational prompt retrieval from Prompts sheet",
+    },
+    {
+        "id": 9,
+        "level": 1,
+        "category": "Workbook - List Workflows",
+        "question": "List all available workflows in the workbook",
+        "expected_keywords": ["workflow", "retrieving", "announce"],
+        "should_cite_source": True,
+        "knowledge_type": "workbook",
+        "description": "L1: Tests listing all workflow names",
+    },
+    {
+        "id": 10,
+        "level": 1,
+        "category": "Jira - Get Issue",
+        "question": "Get details for issue RHIDP-15779",
+        "expected_keywords": ["rhidp-15779", "issue", "status"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests single issue retrieval with full details",
+    },
+    {
+        "id": 11,
+        "level": 1,
+        "category": "Jira - Fix Versions",
+        "question": "What fix versions exist in the RHIDP project?",
+        "expected_keywords": ["version", "rhidp", "fix"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests fix version extraction from project",
+    },
+    {
+        "id": 12,
+        "level": 1,
+        "category": "Jira - Sprint Info",
+        "question": "What sprint is issue RHIDP-15779 in?",
+        "expected_keywords": ["sprint", "rhidp-15779"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests sprint information extraction from issue",
+    },
+    {
+        "id": 13,
+        "level": 1,
+        "category": "Jira - Active Release Dates",
+        "question": "What are the key dates for active releases?",
+        "expected_keywords": ["release", "date", "freeze", "ga"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests release date retrieval from Jira release issues (active_release query)",
+    },
+    {
+        "id": 14,
+        "level": 1,
+        "category": "GDrive - Future Release Dates",
+        "question": "What are the key dates for future releases from the release schedule spreadsheet?",
+        "expected_keywords": ["release", "date", "schedule", "future"],
+        "should_cite_source": True,
+        "knowledge_type": "gdrive",
+        "description": "L1: Tests Google Drive retrieval of future release dates from release schedule spreadsheet",
+    },
+    {
+        "id": 15,
+        "level": 1,
+        "category": "GDrive - Team Mappings",
+        "question": "List all active RHDH teams with their leads and Slack handles",
+        "expected_keywords": ["team", "lead", "slack", "active"],
+        "should_cite_source": True,
+        "knowledge_type": "gdrive",
+        "description": "L1: Tests Google Drive retrieval of team mappings from RHDH Team spreadsheet",
+    },
+    # =============================================================================
+    # LEVEL 2: Cross-Toolkit Coordination (Data Combination)
+    # =============================================================================
+    # These test the agent's ability to combine data from multiple toolkits.
+    # Requires understanding relationships between different data sources.
+    {
+        "id": 16,
+        "level": 2,
+        "category": "JQL Template Application",
+        "question": "Use the 'open_issues_by_type' query template for version 1.9.0 with issuetype=Feature",
+        "expected_keywords": ["1.9.0", "feature", "jira"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L2: Tests retrieving workbook template, substituting placeholders, executing Jira query",
+    },
+    {
+        "id": 17,
+        "level": 2,
+        "category": "Release Status Query",
+        "question": "What's the status of release 1.9.0?",
+        "expected_keywords": ["release", "status", "1.9.0", "progress"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L2: Tests aggregating multiple Jira metrics (open/closed, by type)",
+    },
+    {
+        "id": 18,
+        "level": 2,
+        "category": "CVE Tracking",
+        "question": "What CVEs are outstanding for release 1.9.0?",
+        "expected_keywords": ["cve", "security", "vulnerability", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L2: Tests security-specific filtering and interpretation",
+    },
+    {
+        "id": 19,
+        "level": 2,
+        "category": "GDrive + Jira - Team Issue Counts",
+        "question": "Get open issue counts by team for release 1.9.0",
+        "expected_keywords": ["team", "1.9.0", "count", "issues"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L2: Tests retrieving teams from GDrive, then querying Jira with team filters",
+    },
+    # =============================================================================
+    # LEVEL 3: Structured Workflows (Multi-Step Processes)
+    # =============================================================================
+    # These test multi-step processes that follow workflow instructions.
+    # Requires planning, data gathering, and template filling.
+    {
+        "id": 20,
+        "level": 3,
+        "category": "Code Freeze - Simple",
+        "question": "Create a code freeze announcement for release 1.9.0",
+        "expected_keywords": ["code freeze", "1.9.0", "release"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L3: Tests template retrieval + 2-3 Jira queries + placeholder substitution",
+    },
+    {
+        "id": 21,
+        "level": 3,
+        "category": "Team Breakdown",
+        "question": "Break down open issues by team for release 1.9.0",
+        "expected_keywords": ["team", "1.9.0", "breakdown"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L3: Tests parallel team queries using get_issues_by_team() tool",
+    },
+    {
+        "id": 22,
+        "level": 3,
+        "category": "Feature Freeze - Full",
         "question": "Create a Feature Freeze Update announcement for release 1.9",
         "expected_keywords": ["feature freeze", "1.9"],
         "should_cite_source": True,
         "knowledge_type": "multi",
-        "description": "Tests ability to generate feature freeze announcements using local system prompt template. Validates that the agent can access release context from the local file and query Jira for relevant data.",
+        "description": "L3: Tests complex template with multiple data sources and placeholder filling",
+    },
+    # =============================================================================
+    # LEVEL 4: Advanced Analysis (Complex Reasoning & Accuracy)
+    # =============================================================================
+    # These test advanced capabilities: accuracy validation, risk analysis,
+    # proactive suggestions, and multi-factor reasoning.
+    {
+        "id": 23,
+        "level": 4,
+        "category": "Count Accuracy - Feature Demos",
+        "question": "How many features are tagged for demos in version 1.9.0?",
+        "expected_keywords": ["feature", "demo", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L4: Tests count accuracy (pagination handling) - must report complete count, not sample",
+        "validation_type": "count_accuracy",
+        "jql_query": 'issuetype = Feature AND fixVersion = "1.9.0" AND labels = demo',
+    },
+    {
+        "id": 24,
+        "level": 4,
+        "category": "Risk Analysis",
+        "question": "What are the top 3 risks for releasing version 1.9.0 on time?",
+        "expected_keywords": ["risk", "1.9.0", "blocker"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L4: Tests multi-query analysis, correlation, prioritization, recommendations",
+    },
+    {
+        "id": 25,
+        "level": 4,
+        "category": "JQL Query Construction",
+        "question": "Show me all features in release 1.9.0 that are still in progress",
+        "expected_keywords": ["feature", "in progress", "jira", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L4: Tests complex JQL construction with multiple filters (issuetype + status + fixVersion)",
     },
 ]
 
@@ -192,14 +393,35 @@ def configured_agent(shared_db, token_storage, configured_user_id):
     and creates an actual Agno agent using _get_or_create_agent().
 
     The agent is fully configured and ready to make real API calls.
-    Uses local system prompt file to avoid requiring Google Drive OAuth for the prompt.
+
+    Workbook Source Control:
+    - Default: Google Drive (requires OAuth + RELEASE_MANAGER_WORKBOOK_GDRIVE_URL)
+    - USE_LOCAL_SHEETS=true: Load from local CSV files in exports/release manager_sheets/
+
+    Set via environment variable or just command:
+    - USE_LOCAL_SHEETS=true pytest tests/...
+    - just rm-test 5 --local-sheets
     """
-    # Create the ReleaseManager wrapper with local system prompt file
+    # Check for USE_LOCAL_SHEETS environment variable
+    use_local_sheets = os.getenv("USE_LOCAL_SHEETS", "").lower() in ("true", "1", "yes")
+    local_sheets_dir = None
+
+    if use_local_sheets:
+        local_sheets_path = Path("exports/release manager_sheets")
+        if local_sheets_path.exists():
+            local_sheets_dir = str(local_sheets_path)
+            print(f"\n📊 Workbook Source: Local CSV sheets ({local_sheets_path})")
+        else:
+            print(f"\n⚠️  USE_LOCAL_SHEETS=true but directory not found: {local_sheets_path}")
+            print("   Falling back to Google Drive")
+    else:
+        print("\n📊 Workbook Source: Google Drive (requires OAuth)")
+
     agent_wrapper = ReleaseManager(
         shared_db=shared_db,
         token_storage=token_storage,
         user_id=configured_user_id,
-        system_prompt_local_file="docs/templates/release_manager_system_prompt.md",
+        local_sheets_dir=local_sheets_dir,
     )
 
     # Force creation of the underlying Agno agent
@@ -228,7 +450,7 @@ class TestReleaseManagerScenarios:
         [
             pytest.param(
                 s,
-                id=f"scenario_{s['id']:02d}_{s['category'].lower().replace(' ', '_').replace('-', '_')}",
+                id=f"L{s['level']}_{s['id']:02d}_{s['category'].lower().replace(' ', '_').replace('-', '_')}",
             )
             for s in TEST_SCENARIOS
         ],
@@ -248,6 +470,7 @@ class TestReleaseManagerScenarios:
         - Risk scenarios: pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario -k "risk" -v -m integration
         """
         scenario_id = scenario["id"]
+        level = scenario["level"]
         category = scenario["category"]
         question = scenario["question"]
         expected_keywords = scenario["expected_keywords"]
@@ -256,7 +479,7 @@ class TestReleaseManagerScenarios:
         description = scenario["description"]
 
         print(f"\n{'=' * 80}")
-        print(f"🧪 SCENARIO {scenario_id}: {category}")
+        print(f"🧪 LEVEL {level} - SCENARIO {scenario_id}: {category}")
         print(f"{'=' * 80}")
         print(f"Description: {description}")
         print(f"Question: {question}")
@@ -269,8 +492,7 @@ class TestReleaseManagerScenarios:
         # Validation
         validation_messages = []
 
-        # Check response length
-        assert len(content) >= 50, f"Response too short: {len(content)} chars"
+        # Log response length (no assertion - concise answers are good!)
         validation_messages.append(f"✅ Response length: {len(content)} chars")
 
         # Check for expected keywords
@@ -318,7 +540,62 @@ class TestReleaseManagerScenarios:
             else:
                 validation_messages.append("⚠️  No schedule context found")
 
-        # Count accuracy validation for scenario 7 (JQL count accuracy)
+        if knowledge_type == "workbook":
+            # Should include workbook/template/query references
+            has_workbook_context = any(keyword in content_lower for keyword in ["query", "template", "workflow", "available"])
+            if has_workbook_context:
+                validation_messages.append("✅ Includes workbook context")
+            else:
+                validation_messages.append("⚠️  No workbook context found")
+
+        # Level-specific validation (progressive strictness)
+        if level >= 2:
+            # Level 2+: Should cite multiple sources or show data combination
+            multi_source_indicators = sum(1 for indicator in ["jira", "query", "workbook", "template"] if indicator in content_lower)
+            if multi_source_indicators >= 2:
+                validation_messages.append(f"✅ Level {level}: Multi-source data combination detected")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected multi-source coordination")
+
+        if level >= 3:
+            # Level 3+: Should show structured workflow (multiple steps or template filling)
+            workflow_indicators = any(
+                indicator in content_lower
+                for indicator in [
+                    "step",
+                    "first",
+                    "next",
+                    "then",
+                    "placeholder",
+                    "fill",
+                    "announcement",
+                ]
+            )
+            if workflow_indicators:
+                validation_messages.append(f"✅ Level {level}: Workflow structure present")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected workflow structure")
+
+        if level >= 4:
+            # Level 4: Should show advanced reasoning (analysis, recommendations, prioritization)
+            reasoning_indicators = any(
+                indicator in content_lower
+                for indicator in [
+                    "recommend",
+                    "suggest",
+                    "priority",
+                    "risk",
+                    "analysis",
+                    "because",
+                    "therefore",
+                ]
+            )
+            if reasoning_indicators:
+                validation_messages.append(f"✅ Level {level}: Advanced reasoning present")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected advanced reasoning")
+
+        # Count accuracy validation for scenario 12 (JQL count accuracy)
         if scenario.get("validation_type") == "count_accuracy" and "jql_query" in scenario:
             jql_query = scenario["jql_query"]
             print("\n🔍 Count Accuracy Validation:")

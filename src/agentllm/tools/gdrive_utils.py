@@ -183,6 +183,11 @@ class GoogleDriveExporter:
             self._service = build("drive", "v3", credentials=creds)
         return self._service
 
+    @property
+    def creds(self) -> Credentials:
+        """Get authenticated credentials."""
+        return self._authenticate()
+
     def _authenticate(self) -> Credentials:
         """Authenticate with Google Drive API.
 
@@ -297,7 +302,9 @@ class GoogleDriveExporter:
             return url_or_id
         else:
             logger.error(f"❌ Invalid document ID format: {url_or_id}")
-            raise ValueError(f"Invalid document ID format. Must contain only alphanumeric characters, hyphens, and underscores: {url_or_id}")
+            raise ValueError(
+                f"Invalid document ID format. Must contain only alphanumeric characters, hyphens, and underscores: {url_or_id}"
+            )
 
     def detect_document_type(self, url_or_id: str) -> DocumentType:
         """Detect the type of Google Drive document from URL.
@@ -721,6 +728,79 @@ class GoogleDriveExporter:
         except Exception as e:
             logger.error(f"Failed to extract links from {html_path}: {e}")
             return []
+
+    def export_all_sheets_as_dict(self, file_id: str) -> dict[str, list[dict[str, str]]]:
+        """Export all sheets from a Google Spreadsheet as dict of dicts (in-memory).
+
+        This method uses the Sheets API (not Drive API) to export all sheets.
+        Drive API's export() method only exports the first sheet, so we must use Sheets API.
+
+        Args:
+            file_id: Google Spreadsheet ID.
+
+        Returns:
+            Dictionary mapping sheet names to list of row dicts.
+            Each row is a dict mapping column headers to values.
+            Example: {"Sheet1": [{"col1": "val1", "col2": "val2"}, ...], ...}
+
+        Raises:
+            Exception: If spreadsheet cannot be accessed or parsed.
+        """
+        try:
+            # Build sheets service if we don't have one
+            if not hasattr(self, "_sheets_service"):
+                creds = self._authenticate()
+                self._sheets_service = build("sheets", "v4", credentials=creds)
+
+            # Get spreadsheet metadata to discover all sheet names
+            spreadsheet = self._sheets_service.spreadsheets().get(spreadsheetId=file_id).execute()
+            sheets = spreadsheet.get("sheets", [])
+
+            logger.debug(f"Found {len(sheets)} sheet(s) in workbook")
+
+            result_dict: dict[str, list[dict[str, str]]] = {}
+
+            for sheet in sheets:
+                sheet_name = sheet["properties"]["title"]
+                logger.debug(f"Exporting sheet: {sheet_name}")
+
+                # Get all data from sheet (A:ZZ should cover most cases)
+                try:
+                    response = (
+                        self._sheets_service.spreadsheets().values().get(spreadsheetId=file_id, range=f"'{sheet_name}'!A:ZZ").execute()
+                    )
+
+                    values = response.get("values", [])
+
+                    if not values:
+                        logger.warning(f"Sheet '{sheet_name}' is empty, skipping")
+                        result_dict[sheet_name] = []
+                        continue
+
+                    # First row is headers
+                    headers = values[0]
+
+                    # Parse remaining rows as dicts
+                    rows = []
+                    for row_values in values[1:]:
+                        # Pad row with empty strings if shorter than headers
+                        padded_row = row_values + [""] * (len(headers) - len(row_values))
+                        row_dict = dict(zip(headers, padded_row, strict=False))
+                        rows.append(row_dict)
+
+                    result_dict[sheet_name] = rows
+                    logger.debug(f"Exported {len(rows)} rows from '{sheet_name}'")
+
+                except Exception as e:
+                    logger.error(f"Failed to export sheet '{sheet_name}': {e}")
+                    raise
+
+            logger.debug(f"Successfully exported {len(result_dict)} sheet(s) as dict")
+            return result_dict
+
+        except Exception as e:
+            logger.error(f"Failed to export sheets as dict: {e}")
+            raise
 
     def export_all_sheets_as_csv(self, spreadsheet_id: str, output_dir: Path, spreadsheet_title: str) -> bool:
         """Export all sheets from a Google Spreadsheet as separate CSV files.

@@ -1,0 +1,29 @@
+Tool Name,Category,Parameters,Returns,Use When,Response Format,Example
+get_jira_query_template,Release Manager,query_name: str,"str (formatted with description, JQL, placeholders, example, notes)",Need to look up JQL query template by name. Case-insensitive lookup.,N/A,"get_jira_query_template(""jira list of open issues"")"
+get_slack_template,Release Manager,template_name: str,"str (formatted with milestone, when_to_send, data requirements, template content)",Need Slack announcement template for freeze milestones. Case-insensitive.,N/A,"get_slack_template(""Feature Freeze Update"")"
+get_workflow_instructions,Release Manager,action_name: str,"str (formatted with description, input, data sources, tools, output format, instructions)",Need step-by-step workflow for specific action. Case-insensitive.,N/A,"get_workflow_instructions(""Retrieving Release and Key Dates"")"
+get_project_config,Release Manager,category: str,str (formatted table of items in category),"Need configuration items by category (Core Principles, Jira Projects, etc.). Case-insensitive.",N/A,"get_project_config(""Jira Projects"")"
+get_tool_reference,Release Manager,tool_name: str,"str (formatted with parameters, return values, usage, examples)",Need documentation for a specific tool. Case-insensitive.,N/A,"get_tool_reference(""get_issues_by_team"")"
+get_response_format,Release Manager,format_name: str,"str (formatted with use case, required elements, structure, examples)","Need response format specification (Detailed, Summary, etc.). Case-insensitive.",N/A,"get_response_format(""Detailed format"")"
+get_issue,Jira,"issue_key: str, include_all_comments: bool = True","str (JSON with full issue details, comments, GitHub PR links)",Need complete details for a single issue including description and comments,Detailed,"get_issue(""RHDHPLAN-123"")"
+get_issues_summary,Jira,"jql_query: str, max_results: int = 50","str (JSON with key, summary, status only)",Need to display issues to user with minimal fields - optimized for listings,Summary,"get_issues_summary(""project=RHIDP AND fixVersion=1.9.0"", 50)"
+get_issues_detailed,Jira,"jql_query: str, fields: str, max_results: int = 50, include_summary: bool = True",str (JSON with custom field selection),Need issues with specific custom fields selected,Detailed,"get_issues_detailed(""project=RHIDP"", ""key,summary,status,assignee"")"
+get_issues_stats,Jira,jql_query: str,str (JSON with total count + breakdown by type/status/priority),Need total counts only - lightweight statistics without issue details,Summary,"get_issues_stats(""project=RHIDP AND fixVersion=1.9.0"")"
+get_issues_by_team,Jira,"release_version: str, team_ids: list[str], base_jql: str | None = None",str (JSON with per-team counts),Need per-team breakdowns. ALWAYS use this for team counts (not manual counting). Optional base_jql for freeze-specific queries.,Summary by Team,"get_issues_by_team(""1.9.0"", [""team-plugins"", ""team-ui""])"
+get_fix_versions,Jira,"jql_query: str, max_results: int = 10",str (JSON with unique fix version names),Need to extract unique fix version names from issues,Summary,"get_fix_versions(""project=RHIDP"")"
+extract_sprint_info,Jira,issue_key: str,"str (JSON: {""sprint_id"": ""..."", ""sprint_name"": ""...""} or null)",Need to extract sprint ID and name from an issue,N/A,"extract_sprint_info(""RHIDP-456"")"
+get_sprint_metrics,Jira,sprint_id: str,"str (JSON with total_planned, total_closed, stories_tasks_closed, bugs_closed)","Need sprint statistics - planned vs closed, breakdown by type",Summary,"get_sprint_metrics(""12345"")"
+get_document_content,Google Drive,url_or_id: str,str (content as markdown/CSV/txt depending on type),Need to read Google Docs/Sheets content. Auto-detects format.,N/A,"get_document_content(""1vQXfvID72qwqvLb17eyGOvnZXrZG7NBzTGv6RP9wvyM"")"
+get_user_info,Google Drive,None,"str (JSON with display_name, email, photo_link)",Need info about authenticated Google user,N/A,get_user_info()
+
+#ERROR!
+(Response Format),Output Format,N/A,"Total count, Jira Key/Summary (linked), Status, Priority, Assignee, Jira search link",When detailed issue information is needed - show each issue with full details,Detailed format,"**Total:** 5 issues
+• [RHIDP-123] Feature X - Status: In Progress - Priority: High - Assignee: John
+[View in Jira](link)"
+(Response Format),Output Format,N/A,"Total count, Jira search link",When only count is needed - no issue details required,Summary format,"**Total:** 42 issues
+[View in Jira](link)"
+(Response Format),Output Format,N/A,"Table: Team Name, Total Issues, Jira Search Link (per team)",Team-level aggregation - show counts per team,Summary by Team,"| Team | Issues | Link |
+|------|--------|------|
+| Plugins | 15 | [Jira](link) |"
+(Response Format),Output Format,N/A,"Table: Team Name, Breakdown by type (Features, Epics, Stories, Tasks, Bugs), Links for each",Team breakdown by issue type - detailed per-team analysis,Detailed by Team,"| Team | Features | Epics | Stories | Tasks | Bugs |
+|------|----------|-------|---------|-------|------|"

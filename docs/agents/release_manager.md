@@ -1,8 +1,15 @@
 # Release Manager Agent
 
+> **⚠️ OUTDATED DOCUMENTATION**: This document describes the legacy Google Doc-based system prompt approach. The Release Manager has been refactored to use an **Excel workbook** for structured configuration data.
+>
+> **See [`AGENTS.md`](../../AGENTS.md)** for current documentation on the workbook-based architecture, including:
+> - Workbook structure (7 sheets: Jira Queries, Slack Templates, Workflows, etc.)
+> - Environment variables (`RELEASE_MANAGER_WORKBOOK_GDRIVE_URL`)
+> - Toolkit methods and usage
+
 ## Overview
 
-The Release Manager is the primary AI agent in AgentLLM, designed to help users with software releases, changelogs, and general assistance tasks. It wraps an Agno `Agent` instance with user-specific toolkit configuration management and dynamic system prompt loading.
+The Release Manager is the primary AI agent in AgentLLM, designed to help users with software releases, changelogs, and general assistance tasks. It wraps an Agno `Agent` instance with user-specific toolkit configuration management and workbook-based configuration data.
 
 ## Features
 
@@ -43,46 +50,50 @@ The Release Manager builds the agent's system prompt in the following order:
    - Be concise and clear in your responses.
    ```
 
-2. **Extended Instructions** (from Google Docs, optional)
-   - Fetched from a Google Doc specified by `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL`
+2. **Workbook-Based Configuration** (from Google Sheets, required)
+   - Fetched from an Excel workbook specified by `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL`
+   - Contains structured data: Jira queries, Slack templates, workflows, maintenance guide
    - Cached per user until agent invalidation
-   - See "Extended System Prompt" section below
+   - See [`AGENTS.md`](../../AGENTS.md) for workbook structure details
 
 3. **Toolkit-Specific Instructions** (dynamic, based on configured toolkits)
    - Google Drive usage instructions (if configured)
    - Jira integration instructions (if configured)
    - Other toolkit instructions as they're added
 
-## Extended System Prompt
+## Workbook Configuration (Current Approach)
 
 ### Overview
 
-The Release Manager can fetch additional system prompt instructions from a Google Doc. This allows you to:
+The Release Manager uses an **Excel workbook** (stored as Google Sheets) for structured configuration data. This allows you to:
 
-- Customize agent behavior without code changes
-- Update instructions in real-time by editing the Google Doc
-- Share prompts across development teams
-- Version control prompts using Google Docs revision history
+- Manage Jira query templates (JQL with placeholders)
+- Store Slack announcement templates (freeze notifications)
+- Define workflows and response formats
+- Customize agent behavior through structured data
+- Version control configuration using Google Sheets revision history
 
 ### Configuration
 
 #### 1. Environment Variable
 
-Set the `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` environment variable in your `.env.secrets` file:
+Set the `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` environment variable in your `.env.secrets` file:
 
 ```bash
-# Full URL format
-RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=https://docs.google.com/document/d/1ABC123xyz/edit
+# Full Google Sheets URL
+RELEASE_MANAGER_WORKBOOK_GDRIVE_URL=https://docs.google.com/spreadsheets/d/YOUR_FILE_ID/edit
 
-# Or just the document ID
-RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=1ABC123xyz
+# Current production workbook
+RELEASE_MANAGER_WORKBOOK_GDRIVE_URL=https://docs.google.com/spreadsheets/d/1Dv1JWsQe3Ew82WLFQNhyAwqsn9oEkh2MjoKyHXPuJkk/edit
 ```
 
 #### 2. Prerequisites
 
 - **Google Drive must be configured**: Users must have authorized Google Drive access (via `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET`)
-- **Document access**: Users must have read access to the specified Google Doc
-- **Document format**: Must be a Google Docs document (not Sheets or Slides)
+- **Workbook access**: Users must have read access to the specified Google Sheets workbook
+- **Workbook structure**: Must contain all 7 required sheets (see [`AGENTS.md`](../../AGENTS.md) for sheet structure)
+  - Configuration & Setup, Tools Reference, Response Formats
+  - Jira Queries, Actions & Workflows, Slack Templates, Maintenance Guide
 
 ### How It Works
 
@@ -93,11 +104,11 @@ RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=1ABC123xyz
    ↓
 2. Agent creation triggered
    ↓
-3. Check if RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL is set
+3. Check if RELEASE_MANAGER_WORKBOOK_GDRIVE_URL is set
    ↓ (yes)
 4. Check if user has Google Drive configured
    ↓ (yes)
-5. Check cache for this user's extended prompt
+5. Check cache for this user's workbook data
    ↓ (miss)
 6. Fetch document content via Google Drive API
    ↓
@@ -132,7 +143,7 @@ If fetching the extended prompt fails, **agent creation will fail** with a clear
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set` | Environment variable missing | Set the variable in `.env.secrets` |
+| `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL environment variable not set` | Environment variable missing | Set the variable in `.env.secrets` |
 | `Google Drive is not configured for user {user_id}` | User hasn't authorized Google Drive | User must complete OAuth flow |
 | `Document at {url} returned empty content` | Document is empty or inaccessible | Check document permissions and content |
 | `Failed to fetch extended system prompt from {url}` | Network error, invalid URL, or API error | Check URL, network, and Google Drive API status |
@@ -183,7 +194,7 @@ All changelogs should follow this structure:
 
 #### Extended prompt not loading
 
-1. Check environment variable is set: `echo $RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL`
+1. Check environment variable is set: `echo $RELEASE_MANAGER_WORKBOOK_GDRIVE_URL`
 2. Verify user has Google Drive configured: Check OAuth flow completion
 3. Check document permissions: User must have at least "Viewer" access
 4. Check logs: Look for "Fetching extended system prompt" and error messages
@@ -197,7 +208,7 @@ The extended prompt is cached per user. To force a refresh:
 #### Agent creation fails with prompt error
 
 If agent creation consistently fails:
-1. Temporarily remove `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` to isolate the issue
+1. Temporarily remove `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` to isolate the issue
 2. Verify the Google Doc URL/ID is correct
 3. Check document isn't corrupted or inaccessible
 4. Review error logs for specific failure reasons
@@ -208,7 +219,7 @@ If agent creation consistently fails:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` | No | None | Google Doc URL or ID containing extended system prompt |
+| `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` | Yes | None | Google Sheets URL containing Release Manager workbook |
 | `GDRIVE_CLIENT_ID` | Yes* | None | Google OAuth client ID (*required if using extended prompt) |
 | `GDRIVE_CLIENT_SECRET` | Yes* | None | Google OAuth client secret (*required if using extended prompt) |
 | `GEMINI_API_KEY` | Yes | None | Gemini API key for the underlying model |
@@ -295,7 +306,8 @@ The Release Manager uses a **dual-prompt architecture** that separates stable ag
 
 **Template Location:**
 - `docs/release_manager_system_prompt.md` - Recommended content structure for the external prompt
-- Copy this content to a Google Doc and configure via `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL`
+- See [`AGENTS.md`](../../AGENTS.md) for current workbook-based configuration approach
+- Legacy Google Doc approach has been replaced with Excel workbook (7 structured sheets)
 
 **Design Benefits:**
 - **Code changes** for capability updates (new tools, behavior changes)

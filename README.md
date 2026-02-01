@@ -312,7 +312,7 @@ Optional:
   - **Production** (Kubernetes): `http://litellm-proxy-service:8890/v1`
   - Note: Internal container port is 8890, external host port is 9501
 - `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET` - For Google Drive integration
-- `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` - Extended system prompt URL
+- `RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` - Release Manager workbook URL (Google Sheets)
 
 See `.env.secrets.template` for all available configuration options.
 

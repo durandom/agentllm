@@ -1,4 +1,4 @@
-name,milestone,when_to_send,data_requirements,template_content
+name,milestone,when_to_send,data_requirements,template_content,trigger_phrases
 Feature Freeze Update,Feature Freeze,Before Feature Freeze date,"1. Feature Freeze date from release issue
 2. Active engineering teams from spreadsheet (Category=Engineering, Status=Active)
 3. Outstanding Release Notes count
@@ -14,7 +14,7 @@ Here's what's outstanding for Feature Freeze. Please review and share if there a
 
 There are [{{OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT}}]({{JIRA_LINK}}) oustanding Release Notes. Please review and update Features and bugs.
 
-cc @rhdh-release"
+cc @rhdh-release","""feature freeze update"" / ""feature freeze status"" / ""feature freeze progress"""
 Feature Freeze Announcement,Feature Freeze,On Feature Freeze date,"1. Open EPICs count via get_issues_stats()
 2. CVE issues count via get_issues_stats()
 3. Outstanding Release Notes count",":rotating_light: *RHDH {{RELEASE_VERSION}} [Feature Freeze](https://docs.google.com/document/d/1IjMH985f3XUhXl_6drfUKopLxTBoY0VMJ2Zpr_62K2g/edit?tab=t.0#bookmark=id.5a1n60q199qh)* :rotating_light:
@@ -31,7 +31,7 @@ Its Feature Freeze! To see the latest status use the [RHDH Release Tracking dash
 Please adhere to these rules so we can keep the release stable and on track. Let me know if you have any questions.
 
 Thanks for your support.
-cc @rhdh-release"
+cc @rhdh-release","""feature freeze announcement"" / ""announce feature freeze"" / ""feature freeze reached"""
 Code Freeze Update,Code Freeze,Before Code Freeze date,"1. Code Freeze date from release issue
 2. Active engineering teams from spreadsheet
 3. Outstanding Release Notes count
@@ -48,7 +48,7 @@ Code Freeze is coming up and its target date is *{{CODE_FREEZE_DATE}}*. To check
 
 :two: There are [{{OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT}}]({{JIRA_LINK}}) oustanding Release Notes. Please review and update Features and bugs.
 :three: [{{FEATURE_SUBTASK_ISSUE_COUNT}}]({{JIRA_LINK}}) Feature Subtasks outstanding to verifying Features Acceptance Criteria and creating Feature Demos if needed.
-cc @rhdh-release"
+cc @rhdh-release","""code freeze update"" / ""code freeze status"" / ""code freeze progress"""
 Code Freeze Announcement,Code Freeze,On Code Freeze date,"1. Open Blocker Bugs via Retrieve blocker bugs workflow
 2. Feature Demos count
 3. Open issue count via get_issues_stats()
@@ -65,4 +65,4 @@ Code Freeze Announcement,Code Freeze,On Code Freeze date,"1. Open Blocker Bugs v
 Please adhere to these rules so we can keep the release stable and on track. Let me know if you have any questions.
 
 Thanks for your support!
-@rhdh-release"
+@rhdh-release","""code freeze announcement"" / ""announce code freeze"" / ""code freeze reached"""

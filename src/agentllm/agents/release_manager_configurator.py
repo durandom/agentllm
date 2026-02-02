@@ -251,9 +251,9 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             rm_toolkit: Release Manager toolkit instance.
 
         Returns:
-            Formatted configuration section with all config key-value pairs.
+            Formatted configuration section with all config key-value-description tuples.
         """
-        config_values = rm_toolkit.get_all_config_values()
+        config_values = rm_toolkit.get_all_config_values_with_descriptions()
         if not config_values:
             return ""
 
@@ -261,15 +261,18 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         lines.append("The following configuration values are defined in the workbook:")
         lines.append("")
 
-        for key, value in config_values.items():
-            lines.append(f"- **{key}**: `{value}`")
+        for key, value, description in config_values:
+            if description:
+                lines.append(f"- **{key}**: `{value}` - {description}")
+            else:
+                lines.append(f"- **{key}**: `{value}`")
 
         return "\n".join(lines)
 
     def _build_reference_data(self, rm_toolkit: ReleaseManagerToolkit) -> str:
         """Build reference data listing available resources with descriptions.
 
-        Token-efficient format: `name` - description (when to use)
+        Uses markdown tables with conditional Triggers column (only shown if data exists).
 
         Args:
             rm_toolkit: Release Manager toolkit instance.
@@ -282,31 +285,66 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         workflows = rm_toolkit.list_workflows_with_descriptions()
 
         lines = []
+
+        # Jira Query Templates Table
         if queries:
             lines.append("**Jira Query Templates** (use `get_jira_query_template(query_name)`):")
-            for name, desc in queries:
-                if desc:
-                    lines.append(f"- `{name}` - {desc}")
-                else:
-                    lines.append(f"- `{name}`")
+            lines.append("")
+            has_triggers = rm_toolkit.has_trigger_phrases("Jira Queries")
+            lines.append(self._build_resource_table(queries, has_triggers))
             lines.append("")
 
+        # Slack Templates Table
         if templates:
             lines.append("**Slack Templates** (use `get_slack_template(template_name)`):")
-            for name, when_to_send in templates:
-                if when_to_send:
-                    lines.append(f"- `{name}` - {when_to_send}")
-                else:
-                    lines.append(f"- `{name}`")
+            lines.append("")
+            has_triggers = rm_toolkit.has_trigger_phrases("Slack Templates")
+            lines.append(self._build_resource_table(templates, has_triggers))
             lines.append("")
 
+        # Workflows Table
         if workflows:
             lines.append("**Workflows** (use `get_workflow_instructions(action_name)`):")
-            for name, desc in workflows:
-                if desc:
-                    lines.append(f"- `{name}` - {desc}")
-                else:
-                    lines.append(f"- `{name}`")
+            lines.append("")
+            has_triggers = rm_toolkit.has_trigger_phrases("Actions & Workflows")
+            lines.append(self._build_resource_table(workflows, has_triggers))
+
+        return "\n".join(lines)
+
+    def _build_resource_table(self, resources: list[tuple[str, str, str]], show_triggers: bool) -> str:
+        """Build markdown table for resources (queries, templates, or workflows).
+
+        Args:
+            resources: List of (name, description, trigger_phrases) tuples.
+            show_triggers: Whether to include the Triggers column.
+
+        Returns:
+            Formatted markdown table string.
+        """
+        if not resources:
+            return ""
+
+        lines = []
+
+        # Table header
+        if show_triggers:
+            lines.append("| Name | Description | Triggers |")
+            lines.append("|------|-------------|----------|")
+        else:
+            lines.append("| Name | Description |")
+            lines.append("|------|-------------|")
+
+        # Table rows
+        for name, description, triggers in resources:
+            # Escape pipe characters in cell content
+            name_clean = name.replace("|", "\\|")
+            desc_clean = description.replace("|", "\\|") if description else "-"
+
+            if show_triggers:
+                triggers_clean = triggers.replace("|", "\\|") if triggers else "-"
+                lines.append(f"| `{name_clean}` | {desc_clean} | {triggers_clean} |")
+            else:
+                lines.append(f"| `{name_clean}` | {desc_clean} |")
 
         return "\n".join(lines)
 
@@ -340,8 +378,8 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         """Build workflow-first enforcement framework.
 
         Generates prescriptive instructions that force the agent to check workflows
-        before using direct Jira tools. Uses actual workflow data to build pattern
-        matching table.
+        before using direct Jira tools. Dynamically builds pattern matching from
+        workbook trigger_phrases data.
 
         Args:
             rm_toolkit: Release Manager toolkit instance
@@ -349,72 +387,100 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         Returns:
             Formatted enforcement framework as markdown string
         """
-        # Get available workflows
+        # Get available resources from all three types
         workflows = rm_toolkit.list_workflows_with_descriptions()
-        if not workflows:
+        queries = rm_toolkit.list_queries_with_descriptions()
+        templates = rm_toolkit.list_templates_with_descriptions()
+
+        if not workflows and not queries and not templates:
             return ""
 
-        # Build pattern matching table from workflow names
-        # Map common user query patterns to workflow names
-        # NOTE: When adding new workflows to the workbook, update this map
-        pattern_map = {
-            "Retrieve Blocker Bugs": [
-                '"blocker bugs"',
-                '"blocker issues"',
-                '"blockers"',
-            ],
-            "Retrieve list of CVEs": [
-                '"CVEs"',
-                '"vulnerabilities"',
-                '"security issues"',
-            ],
-            "Retrieve Engineering EPICs": [
-                '"EPICs"',
-                '"open epics"',
-                '"engineering epics"',
-            ],
-            "Retrieve outstanding Release Notes": [
-                '"release notes"',
-                '"missing release notes"',
-            ],
-            "Retrieve Issues by Engineering Teams": [
-                '"team breakdown"',
-                '"issues by team"',
-                '"team counts"',
-            ],
-            "Announce Feature Freeze": [
-                '"feature freeze"',
-                '"feature freeze announcement"',
-            ],
-            "Announce Code Freeze": ['"code freeze"', '"code freeze announcement"'],
-        }
+        # Build pattern maps dynamically from workbook trigger_phrases
+        workflow_patterns = {}
+        query_patterns = {}
+        template_patterns = {}
+        has_any_triggers = False
+
+        for name, _description, trigger_phrases in workflows:
+            if trigger_phrases:
+                has_any_triggers = True
+                # Parse slash-delimited quoted trigger phrases: "phrase" / "phrase" / "phrase"
+                # Remove quotes and split on " / "
+                triggers = [t.strip().strip('"') for t in trigger_phrases.split(" / ") if t.strip()]
+                if triggers:
+                    workflow_patterns[name] = triggers
+
+        for name, _description, trigger_phrases in queries:
+            if trigger_phrases:
+                has_any_triggers = True
+                triggers = [t.strip().strip('"') for t in trigger_phrases.split(" / ") if t.strip()]
+                if triggers:
+                    query_patterns[name] = triggers
+
+        for name, _when_to_send, trigger_phrases in templates:
+            if trigger_phrases:
+                has_any_triggers = True
+                triggers = [t.strip().strip('"') for t in trigger_phrases.split(" / ") if t.strip()]
+                if triggers:
+                    template_patterns[name] = triggers
 
         lines = ["## ⚠️ CRITICAL: WORKFLOW-FIRST DECISION FRAMEWORK", ""]
         lines.append("Before using ANY Jira tool directly, you MUST follow this decision process:")
         lines.append("")
 
-        # Step 1: Pattern Recognition
-        lines.append("### 1. Pattern Recognition")
-        lines.append("Identify if the user's query matches a known workflow:")
-        lines.append("")
+        # Step 1: Pattern Recognition (only if trigger phrases exist in workbook)
+        if has_any_triggers and (workflow_patterns or query_patterns or template_patterns):
+            lines.append("### 1. Pattern Recognition")
+            lines.append("Check if the user's query matches trigger phrases in the workflow/template/query tables below.")
+            lines.append("")
+            lines.append("**Examples:**")
 
-        for workflow_name, patterns in pattern_map.items():
-            # Check if this workflow actually exists in the workbook
-            if any(name.strip() == workflow_name for name, _ in workflows):
-                pattern_str = " / ".join(patterns)
+            # Show 1 example from each resource type that has triggers
+            if workflow_patterns:
+                workflow_name, patterns = next(iter(workflow_patterns.items()))
+                example_patterns = patterns[:3]
+                quoted_patterns = [f'"{p}"' for p in example_patterns]
+                pattern_str = " / ".join(quoted_patterns)
+                if len(patterns) > 3:
+                    pattern_str += " / ..."
                 lines.append(f'- {pattern_str} → `get_workflow_instructions("{workflow_name}")`')
 
-        lines.append("")
+            if template_patterns:
+                template_name, patterns = next(iter(template_patterns.items()))
+                example_patterns = patterns[:3]
+                quoted_patterns = [f'"{p}"' for p in example_patterns]
+                pattern_str = " / ".join(quoted_patterns)
+                if len(patterns) > 3:
+                    pattern_str += " / ..."
+                lines.append(f'- {pattern_str} → `get_slack_template("{template_name}")`')
 
-        # Step 2: Mandatory Check
-        lines.append("### 2. MANDATORY Workflow Check")
-        lines.append("If pattern matches:")
-        lines.append("- Call `get_workflow_instructions(action_name)` FIRST")
-        lines.append("- Do NOT skip to direct Jira queries")
-        lines.append("")
+            if query_patterns:
+                query_name, patterns = next(iter(query_patterns.items()))
+                example_patterns = patterns[:3]
+                quoted_patterns = [f'"{p}"' for p in example_patterns]
+                pattern_str = " / ".join(quoted_patterns)
+                if len(patterns) > 3:
+                    pattern_str += " / ..."
+                lines.append(f'- {pattern_str} → `get_jira_query_template("{query_name}")`')
 
-        # Step 3: Execute Exactly
-        lines.append("### 3. Execute Workflow EXACTLY")
+            lines.append("")
+            lines.append("See the **Available Resources** tables below for complete trigger phrase lists.")
+            lines.append("")
+
+            # Step 2: Mandatory Check
+            lines.append("### 2. MANDATORY Workflow Check")
+            lines.append("If pattern matches:")
+            lines.append("- Call `get_workflow_instructions(action_name)` FIRST")
+            lines.append("- Do NOT skip to direct Jira queries")
+            lines.append("")
+
+            step_num = 3
+        else:
+            # No trigger phrases - start directly with workflow execution
+            step_num = 1
+
+        # Step N: Execute Exactly
+        lines.append(f"### {step_num}. Execute Workflow EXACTLY")
         lines.append("Follow ALL workflow steps including:")
         lines.append("- Use query templates referenced (e.g., 'jira list of open issues' as base)")
         lines.append("- Use tools specified (e.g., `get_issues_detailed` vs `get_issues_summary`)")
@@ -422,30 +488,32 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         lines.append("- Follow output format requirements")
         lines.append("")
 
-        # Step 4: Fallback
-        lines.append("### 4. ONLY if NO Workflow Exists")
+        # Step N+1: Fallback
+        step_num += 1
+        lines.append(f"### {step_num}. ONLY if NO Workflow Exists")
         lines.append("- Check for query template: `get_jira_query_template(query_name)`")
         lines.append("- Last resort: construct custom JQL query")
         lines.append("")
 
-        # Examples
-        lines.append("### Examples")
-        lines.append("")
-        lines.append("**❌ INCORRECT** (violation):")
-        lines.append("```")
-        lines.append('User: "Are there blocker bugs?"')
-        lines.append('Agent: get_issues_summary(jql="project=RHDHPLAN AND priority=Blocker")')
-        lines.append("Problem: Skipped workflow, missed multi-project scope, wrong tool")
-        lines.append("```")
-        lines.append("")
-        lines.append("**✅ CORRECT**:")
-        lines.append("```")
-        lines.append('User: "Are there blocker bugs?"')
-        lines.append('Agent: get_workflow_instructions("Retrieve Blocker Bugs")')
-        lines.append("Agent: Follows workflow steps (uses 'jira list of open issues' template + filters)")
-        lines.append("Agent: Uses get_issues_detailed() as specified")
-        lines.append("Result: Multi-project query, complete data, standardized approach")
-        lines.append("```")
+        # Examples (only include if we have pattern recognition)
+        if has_any_triggers and (workflow_patterns or query_patterns or template_patterns):
+            lines.append("### Examples")
+            lines.append("")
+            lines.append("**❌ INCORRECT** (violation):")
+            lines.append("```")
+            lines.append('User: "Are there blocker bugs?"')
+            lines.append('Agent: get_issues_summary(jql="project=RHDHPLAN AND priority=Blocker")')
+            lines.append("Problem: Skipped workflow, missed multi-project scope, wrong tool")
+            lines.append("```")
+            lines.append("")
+            lines.append("**✅ CORRECT**:")
+            lines.append("```")
+            lines.append('User: "Are there blocker bugs?"')
+            lines.append('Agent: get_workflow_instructions("Retrieve Blocker Bugs")')
+            lines.append("Agent: Follows workflow steps (uses 'jira list of open issues' template + filters)")
+            lines.append("Agent: Uses get_issues_detailed() as specified")
+            lines.append("Result: Multi-project query, complete data, standardized approach")
+            lines.append("```")
 
         return "\n".join(lines)
 

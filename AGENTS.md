@@ -507,12 +507,38 @@ Generates structured sprint review markdown with:
 1. **Configuration & Setup** (Title Case columns): Core principles, project keys, version format
 2. **Tools Reference** (Title Case): Jira and Google Drive tool documentation
 3. **Response Formats** (Title Case): Standard output format specifications
-4. **Jira Queries** (snake_case columns): Reusable JQL query templates with `{{PLACEHOLDER}}` syntax
-5. **Actions & Workflows** (snake_case): Step-by-step workflow instructions
-6. **Slack Templates** (snake_case): Freeze announcement templates (copy-paste ready)
+4. **Jira Queries** (snake_case columns): Reusable JQL query templates with `{{PLACEHOLDER}}` syntax; optional `trigger_phrases` for pattern matching
+5. **Actions & Workflows** (snake_case): Step-by-step workflow instructions; optional `trigger_phrases` for pattern matching
+6. **Slack Templates** (snake_case): Freeze announcement templates (copy-paste ready); optional `trigger_phrases` for pattern matching
 7. **Maintenance Guide** (Title Case): Best practices, troubleshooting, prompt engineering principles
 
 **Key Convention**: Machine-readable sheets (4-6) use `lowercase_snake_case` headers; informational sheets (1-3, 7) use `Title Case` headers.
+
+**Trigger Phrases (Optional Feature)**:
+
+Sheets 4-6 (Jira Queries, Slack Templates, Actions & Workflows) support an optional `trigger_phrases` column:
+
+- **Format**: Quoted, slash-delimited string (e.g., `"blocker bugs" / "blockers" / "critical issues"`)
+- **Purpose**: Controls agent pattern recognition and workflow-first behavior
+- **Presentation**: When present, system prompt shows resources in markdown tables with Name | Description | Triggers columns
+- **Pattern Map**: Dynamically builds pattern matching from workbook data (no hardcoded patterns in code)
+- **Backward Compatible**: If `trigger_phrases` column absent or empty, only Name | Description shown (no pattern recognition section)
+
+**Example with trigger phrases**:
+```
+| Name | Description | Triggers |
+|------|-------------|----------|
+| `Retrieve Blocker Bugs` | Compile all open blocker bugs | "blocker bugs" / "blockers" / "critical issues" |
+| `Announce Feature Freeze` | Slack message for Feature Freeze | "feature freeze" / "feature freeze announcement" |
+```
+
+**Example without trigger phrases** (backward compatible):
+```
+| Name | Description |
+|------|-------------|
+| `Retrieve Blocker Bugs` | Compile all open blocker bugs |
+| `Announce Feature Freeze` | Slack message for Feature Freeze |
+```
 
 **Usage Examples**:
 

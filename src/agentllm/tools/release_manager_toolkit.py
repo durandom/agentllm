@@ -11,15 +11,15 @@ from agno.tools import Toolkit
 SHEET_SCHEMA = {
     "Jira Queries": {
         "required": ["name", "jql_template"],
-        "optional": ["description", "placeholders", "example", "notes"],
+        "optional": ["description", "placeholders", "example", "notes", "trigger_phrases"],
     },
     "Slack Templates": {
         "required": ["name", "template_content"],
-        "optional": ["milestone", "when_to_send", "data_requirements"],
+        "optional": ["milestone", "when_to_send", "data_requirements", "trigger_phrases"],
     },
     "Actions & Workflows": {
         "required": ["name", "instructions"],
-        "optional": ["description", "input_required", "data_sources", "tools", "output_format"],
+        "optional": ["description", "input_required", "data_sources", "tools", "output_format", "trigger_phrases"],
     },
     "Configuration & Setup": {
         "required": ["config_key", "value"],
@@ -86,6 +86,10 @@ class ReleaseManagerToolkit(Toolkit):
         Returns the description, JQL template, and example for the specified query.
         Query templates use {{PLACEHOLDER}} syntax (double curly braces).
 
+        To discover available queries: If you don't know the query name, provide an
+        invalid name (e.g., "list") and the error message will return a formatted list
+        of all available query names.
+
         Args:
             query_name: Name of the query to retrieve (case-insensitive).
 
@@ -93,7 +97,8 @@ class ReleaseManagerToolkit(Toolkit):
             Formatted string with query details.
 
         Raises:
-            ValueError: If query_name not found. Error message includes available queries.
+            ValueError: If query_name not found. Error message includes comma-separated
+                list of all available query names for easy discovery.
         """
         sheet_name = "Jira Queries"
         sheet_data = self._sheets.get(sheet_name, [])
@@ -136,14 +141,19 @@ class ReleaseManagerToolkit(Toolkit):
         Returns the template content which can be filled with placeholder values.
         Templates use {{PLACEHOLDER}} syntax (double curly braces).
 
+        To discover available templates: If you don't know the template name, provide
+        an invalid name (e.g., "list") and the error message will return a formatted
+        list of all available template names.
+
         Args:
             template_name: Name of the template to retrieve (case-insensitive).
 
         Returns:
-            Template content string.
+            Template content string with milestone, when_to_send, and data requirements.
 
         Raises:
-            ValueError: If template_name not found. Error message includes available templates.
+            ValueError: If template_name not found. Error message includes comma-separated
+                list of all available template names for easy discovery.
         """
         sheet_name = "Slack Templates"
         sheet_data = self._sheets.get(sheet_name, [])
@@ -182,14 +192,21 @@ class ReleaseManagerToolkit(Toolkit):
         Returns the complete workflow including description, required inputs,
         data sources, tools to use, output format, and step-by-step instructions.
 
+        To discover available workflows: If you don't know the workflow name, provide
+        an invalid name (e.g., "list") and the error message will return a formatted
+        list of all available workflow names.
+
         Args:
             action_name: Name of the workflow/action to retrieve (case-insensitive).
 
         Returns:
-            Formatted string with complete workflow details.
+            Formatted string with complete workflow details including description,
+            required inputs, data sources, tools to use, output format, and step-by-step
+            instructions.
 
         Raises:
-            ValueError: If action_name not found. Error message includes available workflows.
+            ValueError: If action_name not found. Error message includes comma-separated
+                list of all available workflow names for easy discovery.
         """
         sheet_name = "Actions & Workflows"
         sheet_data = self._sheets.get(sheet_name, [])
@@ -232,6 +249,10 @@ class ReleaseManagerToolkit(Toolkit):
     def get_project_config(self, config_key: str) -> str:
         """Get configuration value from Configuration & Setup sheet.
 
+        To discover available config keys: If you don't know the config key name,
+        provide an invalid name (e.g., "list") and the error message will return a
+        formatted list of all available config keys.
+
         Args:
             config_key: Configuration key to retrieve (case-insensitive).
                 Examples: "jira_default_base_jql", "team_mapping_gdrive_id"
@@ -240,7 +261,8 @@ class ReleaseManagerToolkit(Toolkit):
             Formatted string with config key, value, and description.
 
         Raises:
-            ValueError: If config_key not found. Error message includes available keys.
+            ValueError: If config_key not found. Error message includes comma-separated
+                list of all available config keys for easy discovery.
         """
         sheet_name = "Configuration & Setup"
         sheet_data = self._sheets.get(sheet_name, [])
@@ -273,14 +295,20 @@ class ReleaseManagerToolkit(Toolkit):
 
         Returns parameters, return values, usage guidance, and examples.
 
+        To discover available tools: If you don't know the tool name, provide an
+        invalid name (e.g., "list") and the error message will return a formatted
+        list of all available tool names.
+
         Args:
             tool_name: Name of the tool to retrieve (case-insensitive).
 
         Returns:
-            Formatted string with tool documentation.
+            Formatted string with tool documentation including category, parameters,
+            return values, usage guidance, and examples.
 
         Raises:
-            ValueError: If tool_name not found. Error message includes available tools.
+            ValueError: If tool_name not found. Error message includes comma-separated
+                list of all available tool names for easy discovery.
         """
         sheet_name = "Tools Reference"
         sheet_data = self._sheets.get(sheet_name, [])
@@ -403,32 +431,47 @@ class ReleaseManagerToolkit(Toolkit):
         sheet_data = self._sheets.get("Actions & Workflows", [])
         return [row.get("name", "").strip() for row in sheet_data if row.get("name")]
 
-    def list_queries_with_descriptions(self) -> list[tuple[str, str]]:
-        """List all Jira queries with their descriptions.
+    def list_queries_with_descriptions(self) -> list[tuple[str, str, str]]:
+        """List all Jira queries with their descriptions and trigger phrases.
 
         Returns:
-            List of (name, description) tuples.
+            List of (name, description, trigger_phrases) tuples.
+            trigger_phrases is empty string if not present.
         """
         sheet_data = self._sheets.get("Jira Queries", [])
-        return [(row.get("name", "").strip(), row.get("description", "").strip()) for row in sheet_data if row.get("name")]
+        return [
+            (row.get("name", "").strip(), row.get("description", "").strip(), row.get("trigger_phrases", "").strip())
+            for row in sheet_data
+            if row.get("name")
+        ]
 
-    def list_templates_with_descriptions(self) -> list[tuple[str, str]]:
-        """List all Slack templates with their when_to_send descriptions.
+    def list_templates_with_descriptions(self) -> list[tuple[str, str, str]]:
+        """List all Slack templates with their when_to_send descriptions and trigger phrases.
 
         Returns:
-            List of (name, when_to_send) tuples.
+            List of (name, when_to_send, trigger_phrases) tuples.
+            trigger_phrases is empty string if not present.
         """
         sheet_data = self._sheets.get("Slack Templates", [])
-        return [(row.get("name", "").strip(), row.get("when_to_send", "").strip()) for row in sheet_data if row.get("name")]
+        return [
+            (row.get("name", "").strip(), row.get("when_to_send", "").strip(), row.get("trigger_phrases", "").strip())
+            for row in sheet_data
+            if row.get("name")
+        ]
 
-    def list_workflows_with_descriptions(self) -> list[tuple[str, str]]:
-        """List all workflows with their descriptions.
+    def list_workflows_with_descriptions(self) -> list[tuple[str, str, str]]:
+        """List all workflows with their descriptions and trigger phrases.
 
         Returns:
-            List of (name, description) tuples.
+            List of (name, description, trigger_phrases) tuples.
+            trigger_phrases is empty string if not present.
         """
         sheet_data = self._sheets.get("Actions & Workflows", [])
-        return [(row.get("name", "").strip(), row.get("description", "").strip()) for row in sheet_data if row.get("name")]
+        return [
+            (row.get("name", "").strip(), row.get("description", "").strip(), row.get("trigger_phrases", "").strip())
+            for row in sheet_data
+            if row.get("name")
+        ]
 
     def get_system_prompt(self) -> str:
         """Get system prompt from Prompts sheet (internal use by configurator).
@@ -453,14 +496,22 @@ class ReleaseManagerToolkit(Toolkit):
     def get_prompt(self, prompt_name: str) -> str:
         """Get situational prompt by name (exposed as agent tool).
 
+        Provides detailed guidance for specific situations like risk identification,
+        team coordination, or release readiness assessment.
+
+        To discover available prompts: If you don't know the prompt name, provide an
+        invalid name (e.g., "list") and the error message will return a formatted list
+        of all available situational prompts.
+
         Args:
             prompt_name: Name of prompt (case-insensitive)
 
         Returns:
-            Formatted prompt with context and content
+            Formatted prompt with context and content for the specific situation
 
         Raises:
-            ValueError: If prompt not found (error lists available prompts)
+            ValueError: If prompt not found. Error message includes comma-separated
+                list of all available prompt names for easy discovery.
         """
         sheet_data = self._sheets.get("Prompts", [])
         if not sheet_data:
@@ -524,6 +575,21 @@ class ReleaseManagerToolkit(Toolkit):
 
         return prompts
 
+    def has_trigger_phrases(self, sheet_name: str) -> bool:
+        """Check if any row in the sheet has trigger_phrases data.
+
+        Args:
+            sheet_name: Name of the sheet to check.
+
+        Returns:
+            True if at least one row has non-empty trigger_phrases.
+        """
+        sheet_data = self._sheets.get(sheet_name, [])
+        for row in sheet_data:
+            if row.get("trigger_phrases", "").strip():
+                return True
+        return False
+
     def get_all_config_values(self) -> dict[str, str]:
         """Get all configuration values as a dictionary (for system prompt injection).
 
@@ -542,3 +608,23 @@ class ReleaseManagerToolkit(Toolkit):
                 config[key] = value
 
         return config
+
+    def get_all_config_values_with_descriptions(self) -> list[tuple[str, str, str]]:
+        """Get all configuration values with descriptions (for system prompt injection).
+
+        Returns:
+            List of (config_key, value, description) tuples. Description may be empty string.
+        """
+        sheet_data = self._sheets.get("Configuration & Setup", [])
+        if not sheet_data:
+            return []
+
+        configs = []
+        for row in sheet_data:
+            key = row.get("config_key", "").strip()
+            value = row.get("value", "").strip()
+            description = row.get("description", "").strip()
+            if key and value:
+                configs.append((key, value, description))
+
+        return configs

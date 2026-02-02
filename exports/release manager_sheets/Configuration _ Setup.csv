@@ -1,7 +1,7 @@
-config_key,value,description
+config_key,value,description,NOTES
 jira_default_base_jql,"project IN (RHIDP, RHDHBugs, RHDHPLAN, RHDHSUPP) AND status != closed",Default JQL scope applied to Release Manager queries (filters to RHDH projects and open issues)
-team_mapping_gdrive_id,1Dv1JWsQe3Ew82WLFQNhyAwqsn9oEkh2MjoKyHXPuJkk,Google Drive file ID for RHDH Team Mapping spreadsheet (used in team breakdown workflows)
-release_schedule_gdrive_id,1knVzlMW0l0X4c7gkoiuaGql1zuFgEGwHHBsj-ygUTnc,Google Drive file ID for Release Schedule spreadsheet (used in future release dates workflow)
+team_mapping_gdrive_id,1vQXfvID72qwqvLb17eyGOvnZXrZG7NBzTGv6RP9wvyM,Google Drive file ID for RHDH Team Mapping spreadsheet (used in team breakdown workflows)
+release_schedule_gdrive_id,1knVzlMW0l0X4c7gkoiuaGql1zuFgEGwHHBsj-ygUTnc,Google Drive file ID for Release Schedule spreadsheet (used in future release dates workflow),the agent currently is only capable of fetch the first sheet
 jira_project_rhdhplan,RHDHPLAN,"Track outcome, features and feature requests for strategic planning"
 jira_project_rhidp,RHIDP,"Engineering jira project - tracks EPICs, Story, Task, sub-tasks"
 jira_project_rhdh_bugs,RHDHBugs,Tracks product bugs with bug type

@@ -186,9 +186,8 @@ class TestSystemPromptConfiguration:
         """Test that configs are in correct order (GoogleDrive before SystemPrompt)."""
         configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
-        from agentllm.agents.toolkit_configs.system_prompt_extension_config import SystemPromptExtensionConfig
-
         from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveConfig
+        from agentllm.agents.toolkit_configs.system_prompt_extension_config import SystemPromptExtensionConfig
 
         # Find indices
         gdrive_index = next(i for i, c in enumerate(configurator.toolkit_configs) if isinstance(c, GoogleDriveConfig))

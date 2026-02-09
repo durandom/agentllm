@@ -504,15 +504,15 @@ Generates structured sprint review markdown with:
 
 **Workbook Structure** (7 Sheets):
 
-1. **Configuration & Setup** (Title Case columns): Core principles, project keys, version format
-2. **Tools Reference** (Title Case): Jira and Google Drive tool documentation
-3. **Response Formats** (Title Case): Standard output format specifications
-4. **Jira Queries** (snake_case columns): Reusable JQL query templates with `{{PLACEHOLDER}}` syntax; optional `trigger_phrases` for pattern matching
-5. **Actions & Workflows** (snake_case): Step-by-step workflow instructions; optional `trigger_phrases` for pattern matching
-6. **Slack Templates** (snake_case): Freeze announcement templates (copy-paste ready); optional `trigger_phrases` for pattern matching
-7. **Maintenance Guide** (Title Case): Best practices, troubleshooting, prompt engineering principles
+1. **Configuration & Setup** (snake_case columns): Core principles, project keys, version format
+2. **Tools Reference** (Title Case columns): Jira and Google Drive tool documentation
+3. **Jira Queries** (snake_case columns): Reusable JQL query templates with `{{PLACEHOLDER}}` syntax; optional `trigger_phrases` for pattern matching
+4. **Actions & Workflows** (snake_case): Step-by-step workflow instructions; optional `trigger_phrases` for pattern matching
+5. **Slack Templates** (snake_case): Freeze announcement templates (copy-paste ready); optional `trigger_phrases` for pattern matching
+6. **Maintenance Guide** (Title Case): Best practices, troubleshooting, prompt engineering principles
+7. **Prompts** (snake_case): Situational and system prompts with prompt_type classification
 
-**Key Convention**: Machine-readable sheets (4-6) use `lowercase_snake_case` headers; informational sheets (1-3, 7) use `Title Case` headers.
+**Key Convention**: Machine-readable sheets (1, 3-5, 7) use `lowercase_snake_case` headers; informational sheets (2, 6) use `Title Case` headers.
 
 **Trigger Phrases (Optional Feature)**:
 
@@ -553,9 +553,9 @@ Sheets 4-6 (Jira Queries, Slack Templates, Actions & Workflows) support an optio
 - `get_jira_query_template(query_name)` - Get JQL template with description and example
 - `get_slack_template(template_name)` - Get Slack announcement template content
 - `get_workflow_instructions(action_name)` - Get step-by-step workflow
-- `get_project_config(category)` - Get configuration items by category
+- `get_project_config(config_key)` - Get configuration value by key
 - `get_tool_reference(tool_name)` - Get tool documentation
-- `get_response_format(format_name)` - Get response format specification
+- `get_prompt(prompt_name)` - Get situational prompt by name
 - `list_available_queries()` - List all query names (helper, not exposed as tool)
 - `list_available_templates()` - List all template names (helper)
 - `list_available_workflows()` - List all workflow names (helper)

@@ -92,7 +92,7 @@ RELEASE_MANAGER_WORKBOOK_GDRIVE_URL=https://docs.google.com/spreadsheets/d/1Dv1J
 - **Google Drive must be configured**: Users must have authorized Google Drive access (via `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET`)
 - **Workbook access**: Users must have read access to the specified Google Sheets workbook
 - **Workbook structure**: Must contain all 7 required sheets (see [`AGENTS.md`](../../AGENTS.md) for sheet structure)
-  - Configuration & Setup, Tools Reference, Response Formats
+  - Configuration & Setup, Tools Reference, Prompts
   - Jira Queries, Actions & Workflows, Slack Templates, Maintenance Guide
 
 ### How It Works

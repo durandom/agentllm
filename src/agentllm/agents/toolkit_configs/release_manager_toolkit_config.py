@@ -53,9 +53,6 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
                              Useful for testing without OAuth.
             **kwargs: Additional arguments passed to parent BaseToolkitConfig.
 
-        Raises:
-            ValueError: If RELEASE_MANAGER_WORKBOOK_GDRIVE_URL env var is missing
-                       (when local_sheets_dir is not provided).
         """
         super().__init__(**kwargs)
         self._gdrive_config = gdrive_config
@@ -63,12 +60,11 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
         self._sheets_cache: dict[str, dict[str, list[dict[str, str]]]] = {}  # {user_id: sheets_data}
         self._workbook_url = os.getenv("RELEASE_MANAGER_WORKBOOK_GDRIVE_URL")
 
-        # Validate configuration
         if not self._local_sheets_dir and not self._workbook_url:
-            raise ValueError(
-                "Missing required environment variable: RELEASE_MANAGER_WORKBOOK_GDRIVE_URL\n"
-                "Please set this to the Google Sheets URL of your Release Manager workbook.\n"
-                "Alternatively, provide local_sheets_dir parameter for offline testing."
+            logger.warning(
+                "RELEASE_MANAGER_WORKBOOK_GDRIVE_URL is not set. "
+                "Release Manager will not be fully configured until the env var is set "
+                "or local_sheets_dir is provided."
             )
 
     def is_required(self) -> bool:

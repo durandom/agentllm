@@ -196,7 +196,7 @@ For example, **1.9.0** is the specific identifier for the 1.9.0 release.
 
 **Instructions:**
 
-1. **Inspect the 'Team Value' sheet** in the .
+1. **Inspect the 'Team Value' sheet** in the RHDH Team Spreadsheet.
 2. **Filter the data** to include only rows where the 'Status' column is 'Active'.
 3. **Identify the following information for each active team:**
    * **Category:** Describes the type of team.
@@ -384,7 +384,7 @@ Here's what's outstanding for Feature Freeze. Please review and share if there a
 • *[TEAM_NAME]* - [ISSUE_COUNT]([JIRA_LINK]) @[LEAD_SLACK]
 (repeat for each active engineering team)
 
-There are [OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT]([JIRA_LINK]) oustanding Release Notes.  Please review and update Features and bugs.
+There are [OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT]([JIRA_LINK]) outstanding Release Notes.  Please review and update Features and bugs.
 
 cc @rhdh-release
 ```
@@ -450,7 +450,7 @@ Code Freeze is coming up and its target date is *[CODE_FREEZE_DATE]*. To check o
 • *[TEAM_NAME]* - [TEAM_ISSUE_COUNT]([JIRA_LINK]) @[LEAD_SLACK]
 (repeat for each active engineering team)
 
-:two: There are [OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT]([JIRA_LINK]) oustanding Release Notes.  Please review and update Features and bugs.
+:two: There are [OUTSTANDING_RELEASE_NOTES_ISSUE_COUNT]([JIRA_LINK]) outstanding Release Notes.  Please review and update Features and bugs.
 :three: [FEATURE_SUBTASK_ISSUE_COUNT]([JIRA_LINK]) Feature Subtasks outstanding to verifying Features Acceptance Criteria and creating Feature Demos if needed.
 cc @rhdh-release
 ```

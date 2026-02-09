@@ -76,8 +76,9 @@ def mock_gdrive_workbook():
 
     Returns:
         Dictionary mapping sheet names to list of row dicts with proper column naming:
-        - Machine-readable sheets (4-6): lowercase_snake_case headers
-        - Informational sheets (1-3, 7): Title Case headers
+        - Machine-readable sheets (Configuration & Setup, Jira Queries,
+          Actions & Workflows, Slack Templates, Prompts): lowercase_snake_case headers
+        - Informational sheets (Tools Reference, Maintenance Guide): Title Case headers
     """
     return {
         "Configuration & Setup": [  # NOTE: snake_case columns (changed from Title Case)

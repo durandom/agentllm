@@ -361,8 +361,6 @@ class JiraConfig(BaseToolkitConfig):
             Dict mapping tool name to first 'Use When' bullet point
             (for concise system prompt overview)
         """
-        import re
-
         toolkit = self.get_toolkit(user_id)
         if not toolkit:
             return {}

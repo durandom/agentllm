@@ -23,10 +23,12 @@ def format_ticket_line(item: dict) -> str:
     """Format a single ticket line for Slack.
 
     Args:
-        item: Ticket dictionary with 'ticket', 'title', optional 'team' and 'components'
+        item: Ticket dictionary with 'ticket', 'title', optional 'team', 'components',
+              'team_is_new', and 'new_components'
 
     Returns:
-        Formatted line like: "<title>[hyperlink] → Team: Security | Component: RBAC, Keycloak"
+        Formatted line like: "<title>[hyperlink] → Team: Security | Component: RBAC, *Keycloak*"
+        New assignments are bolded, existing ones are not.
     """
     ticket = item["ticket"]
     title = item.get("title", ticket)  # Fallback to ticket ID if no title
@@ -35,10 +37,27 @@ def format_ticket_line(item: dict) -> str:
     # Build assignment details
     parts = []
     if "team" in item:
-        parts.append(f"Team: *{item['team']}*")
+        team_name = item["team"]
+        # Bold and italic if team is newly assigned
+        if item.get("team_is_new", False):
+            parts.append(f"Team: *_{team_name}_*")
+        else:
+            parts.append(f"Team: {team_name}")
+
     if "components" in item and item["components"]:
-        components_str = ", ".join(item["components"])
-        parts.append(f"Component: *{components_str}*")
+        # Get list of new components
+        new_components = item.get("new_components", [])
+
+        # Format each component: bold+italic if new, regular if existing
+        formatted_components = []
+        for comp in item["components"]:
+            if comp in new_components:
+                formatted_components.append(f"*_{comp}_*")
+            else:
+                formatted_components.append(comp)
+
+        components_str = ", ".join(formatted_components)
+        parts.append(f"Component: {components_str}")
 
     # Format as: <URL|Title> with details on new line
     if parts:
@@ -49,11 +68,14 @@ def format_ticket_line(item: dict) -> str:
         return f"<{ticket_url}|{title}>"
 
 
-def build_slack_message(results: dict) -> dict:
+def build_slack_message(results: dict, items_subset: list = None,
+                        include_header: bool = True) -> dict:
     """Build Slack message payload from results.
 
     Args:
         results: Results dictionary from auto_triage.py
+        items_subset: Subset of items to include (for splitting large messages)
+        include_header: Whether to include header with summary stats
 
     Returns:
         Slack webhook payload dictionary
@@ -68,14 +90,14 @@ def build_slack_message(results: dict) -> dict:
         success_label = "Would Assign"
         items_label = "Would Assign"
         items_emoji = "🔍"
-        items = results.get("auto_apply_items", [])
+        items = items_subset if items_subset is not None else results.get("auto_apply_items", [])
     else:
         header = "Jira Auto-Triage Summary"
         success_count = results.get("applied", 0)
         success_label = "Successfully Assigned"
         items_label = "Assigned Issues"
         items_emoji = "✅"
-        items = results.get("applied_items", [])
+        items = items_subset if items_subset is not None else results.get("applied_items", [])
 
     # Format ticket lines
     ticket_lines = [format_ticket_line(item) for item in items]
@@ -85,29 +107,40 @@ def build_slack_message(results: dict) -> dict:
         tickets_text = "None"
 
     # Build main message
-    blocks = [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": header},
-        },
-        {
-            "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": f"Total Processed: *{total_count}*"},
-                {"type": "mrkdwn", "text": f"{success_label}: *{success_count}*"},
-            ],
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"{items_emoji} *{items_label}:*\n{tickets_text}",
-            },
-        },
-    ]
+    blocks = []
 
-    # Add failed section (apply mode only)
-    if not is_dry_run:
+    # Add header with summary stats (first message only)
+    if include_header:
+        blocks.extend([
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": header},
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"Total Processed: *{total_count}*"},
+                    {"type": "mrkdwn", "text": f"{success_label}: *{success_count}*"},
+                ],
+            }
+        ])
+
+    # Add items section (only show label in first message)
+    if include_header:
+        text = f"{items_emoji} *{items_label}:*\n{tickets_text}"
+    else:
+        text = tickets_text
+
+    blocks.append({
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": text,
+        },
+    })
+
+    # Add failed section (apply mode only, first message only)
+    if not is_dry_run and include_header:
         failed_count = results.get("failed", 0)
         if failed_count > 0:
             failed_items = results.get("failed_items", [])
@@ -124,23 +157,11 @@ def build_slack_message(results: dict) -> dict:
                 }
             )
 
-    # Add workflow run link (from environment variables)
-    workflow_url = os.getenv("GITHUB_WORKFLOW_URL")
-    if workflow_url:
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {"type": "mrkdwn", "text": f"<{workflow_url}|View Workflow Run>"}
-                ],
-            }
-        )
-
     return {"blocks": blocks}
 
 
 def send_slack_notification(webhook_url: str, results: dict) -> bool:
-    """Send Slack notification.
+    """Send Slack notification, splitting into multiple messages of 10 tickets each.
 
     Args:
         webhook_url: Slack webhook URL
@@ -150,10 +171,38 @@ def send_slack_notification(webhook_url: str, results: dict) -> bool:
         True if successful, False otherwise
     """
     try:
-        payload = build_slack_message(results)
+        is_dry_run = results.get("applied", 0) == 0 and results.get("auto_apply", 0) > 0
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
-        response.raise_for_status()
+        # Get items to send
+        if is_dry_run:
+            items = results.get("auto_apply_items", [])
+        else:
+            items = results.get("applied_items", [])
+
+        # Split into chunks of 10 tickets each
+        CHUNK_SIZE = 10
+        chunks = [items[i:i + CHUNK_SIZE] for i in range(0, len(items), CHUNK_SIZE)]
+
+        if not chunks:
+            chunks = [[]]  # Empty list if no items
+
+        # Send each chunk
+        for i, chunk in enumerate(chunks):
+            # First message includes header with summary stats
+            # Subsequent messages are just ticket lists
+            include_header = (i == 0)
+
+            payload = build_slack_message(
+                results,
+                items_subset=chunk if chunk else None,
+                include_header=include_header
+            )
+
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+
+            if len(chunks) > 1:
+                logger.info(f"Sent message {i + 1}/{len(chunks)}")
 
         logger.info("Slack notification sent successfully")
         return True

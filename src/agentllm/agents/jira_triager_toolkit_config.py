@@ -178,15 +178,20 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                     logger.error(f"No Jira token found for user {user_id}")
                     return None
 
+            # Get team_assignee_map from config
+            config = self._user_configs.get(user_id, {})
+            team_assignee_map = config.get("team_assignee_map", {})
+
             # Create the triager toolkit (logic-based, no RAG dependencies)
             toolkit = JiraTriagerTools(
                 jira_token=token_data["token"],
                 jira_url=token_data["server_url"],
+                team_assignee_map=team_assignee_map,
             )
 
             # Cache the toolkit
             self._triager_toolkits[user_id] = toolkit
-            logger.info(f"Created JiraTriagerTools for user {user_id}")
+            logger.info(f"Created JiraTriagerTools for user {user_id} with {len(team_assignee_map)} teams")
 
             return toolkit
 

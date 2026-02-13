@@ -50,7 +50,8 @@ DEFAULT_JQL_FILTER = (
     'project in ("Red Hat Internal Developer Platform", "RHDH Support", "Red Hat Developer Hub Bugs") '
     "AND status != closed "
     "AND (Team is EMPTY OR component is EMPTY) "
-    'AND issuetype not in (Sub-task, Feature, "Feature Request", Outcome) '
+    'AND issuetype not in (Sub-task, Epic, Feature, "Feature Request", Outcome) '
+    'AND (component is EMPTY OR component not in (Orchestrator)) '
     "ORDER BY created DESC, priority DESC"
 )
 
@@ -110,12 +111,7 @@ def parse_triage_table(response_text: str) -> list[dict]:
         else:
             continue
 
-        # Skip if action is not NEW (skip APPEND and SKIP)
-        if action.upper() != "NEW":
-            logger.debug(f"Skipping {ticket} {field} (action: {action})")
-            continue
-
-        # Parse confidence percentage
+        # Parse confidence percentage (handle SKIP actions that may not have confidence)
         confidence_match = re.search(r"(\d+)%", confidence_str)
         confidence = int(confidence_match.group(1)) if confidence_match else 0
 
@@ -137,21 +133,28 @@ def parse_triage_table(response_text: str) -> list[dict]:
 
 
 def classify_recommendations(recommendations: list[dict], threshold: int) -> dict:
-    """Classify recommendations (applies all regardless of threshold).
+    """Classify recommendations, filtering out SKIP actions.
 
     Args:
         recommendations: List of recommendation dictionaries
         threshold: Unused (kept for backward compatibility)
 
     Returns:
-        Dictionary with 'auto_apply' containing all items
+        Dictionary with 'auto_apply' containing items to apply (excludes SKIP),
+        and 'all' containing all recommendations including SKIP
     """
+    # Filter out SKIP actions for applying to Jira
+    auto_apply = [rec for rec in recommendations if rec.get("action", "").upper() != "SKIP"]
+
     unique_count = len(set(rec["ticket"] for rec in recommendations))
+    unique_apply_count = len(set(rec["ticket"] for rec in auto_apply))
     logger.info(
-        f"Will apply all {len(recommendations)} recommendations to {unique_count} issues"
+        f"Will apply {len(auto_apply)} recommendations to {unique_apply_count} issues "
+        f"(total {len(recommendations)} including SKIP)"
     )
     return {
-        "auto_apply": recommendations,
+        "auto_apply": auto_apply,
+        "all": recommendations,  # Include SKIP for display purposes
     }
 
 
@@ -203,15 +206,52 @@ def build_ticket_details(recommendations: list[dict], token_storage, user_id: st
     for rec in recommendations:
         ticket = rec["ticket"]
         if ticket not in by_ticket:
-            by_ticket[ticket] = {"team": None, "components": [], "title": None}
+            by_ticket[ticket] = {
+                "team": None,
+                "team_is_new": False,
+                "components": [],
+                "new_components": [],  # Track which components are newly added
+                "title": None
+            }
 
         # Extract team and components from recommendations
         if rec["field"] == "team":
-            by_ticket[ticket]["team"] = rec["recommended"]
+            # For SKIP actions, use current team (already set), otherwise use recommended
+            if rec.get("action", "").upper() == "SKIP":
+                current_str = rec.get("current", "").strip()
+                if current_str and current_str not in ("(empty)", "None", ""):
+                    by_ticket[ticket]["team"] = current_str
+                    by_ticket[ticket]["team_is_new"] = False
+            else:
+                by_ticket[ticket]["team"] = rec["recommended"]
+                # Team is new if current is empty OR action is NEW
+                current_str = rec.get("current", "").strip()
+                is_current_empty = not current_str or current_str in ("(empty)", "None", "")
+                action_is_new = rec.get("action", "").upper() == "NEW"
+                by_ticket[ticket]["team_is_new"] = is_current_empty or action_is_new
         elif rec["field"] == "components":
-            # Split comma-separated components
-            components = [c.strip() for c in rec["recommended"].split(",")]
-            by_ticket[ticket]["components"].extend(components)
+            # Parse current (existing) and recommended components
+            current_str = rec.get("current", "").strip()
+            recommended_str = rec["recommended"].strip()
+
+            existing_components = []
+            if current_str and current_str != "(empty)" and current_str != "None":
+                existing_components = [c.strip() for c in current_str.split(",") if c.strip()]
+
+            recommended_components = [c.strip() for c in recommended_str.split(",") if c.strip()]
+
+            # Determine which components are new
+            for comp in recommended_components:
+                if comp not in by_ticket[ticket]["components"]:
+                    by_ticket[ticket]["components"].append(comp)
+                    # Mark as new if not in existing
+                    if comp not in existing_components:
+                        by_ticket[ticket]["new_components"].append(comp)
+
+            # Also add existing components that aren't already in the list
+            for comp in existing_components:
+                if comp not in by_ticket[ticket]["components"]:
+                    by_ticket[ticket]["components"].append(comp)
 
     # Fetch ticket titles from Jira
     for ticket in by_ticket.keys():
@@ -232,8 +272,10 @@ def build_ticket_details(recommendations: list[dict], token_storage, user_id: st
         }
         if details["team"]:
             item["team"] = details["team"]
+            item["team_is_new"] = details["team_is_new"]
         if details["components"]:
             item["components"] = details["components"]
+            item["new_components"] = details["new_components"]
         ticket_details.append(item)
 
     return ticket_details
@@ -426,6 +468,10 @@ def run_triage(
             # Fallback: convert to string
             response_text = str(result)
 
+        # Log agent response for debugging
+        logger.info(f"Agent response received ({len(response_text)} characters)")
+        logger.debug(f"Full agent response:\n{response_text}")
+
         if not json_output:
             print(response_text, flush=True)
     except Exception as e:
@@ -457,15 +503,15 @@ def run_triage(
             "recommendations": [],
         }
 
-    # Classify by confidence (applies all recommendations)
+    # Classify by confidence (filters out SKIP for applying)
     classified = classify_recommendations(recommendations, confidence_threshold)
 
     # Count unique issues (not fields)
     unique_total = len(set(item["ticket"] for item in recommendations))
     unique_auto_apply = len(set(item["ticket"] for item in classified["auto_apply"]))
 
-    # Build detailed ticket information with team and component assignments
-    auto_apply_items = build_ticket_details(classified["auto_apply"], token_storage, user_id)
+    # Build detailed ticket information for display (includes SKIP to show what's already set)
+    auto_apply_items = build_ticket_details(classified["all"], token_storage, user_id)
 
     results = {
         "success": True,

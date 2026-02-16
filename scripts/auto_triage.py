@@ -32,9 +32,8 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from loguru import logger
-
 from agno.db.sqlite import SqliteDb
+from loguru import logger
 
 # Import toolkit configs to register token types with global registry
 from agentllm.agents.toolkit_configs.jira_config import JiraConfig  # noqa: F401
@@ -127,7 +126,7 @@ def parse_triage_table(response_text: str) -> list[dict]:
 
         recommendations.append(rec)
 
-    unique_issues = len(set(rec["ticket"] for rec in recommendations))
+    unique_issues = len({rec["ticket"] for rec in recommendations})
     logger.info(f"Parsed {len(recommendations)} recommendations for {unique_issues} issues from table")
     return recommendations
 
@@ -389,11 +388,10 @@ def apply_recommendations(recommendations: list[dict], token_storage, user_id: s
             logger.error(f"Failed to update {ticket}: {type(e).__name__}")
             failed.extend(updates)
 
-    unique_applied = len(set(item["ticket"] for item in applied))
-    unique_failed = len(set(item["ticket"] for item in failed))
+    unique_applied = len({item["ticket"] for item in applied})
+    unique_failed = len({item["ticket"] for item in failed})
     logger.info(
-        f"Applied {len(applied)} recommendations to {unique_applied} issues, "
-        f"failed {len(failed)} recommendations on {unique_failed} issues"
+        f"Applied {len(applied)} recommendations to {unique_applied} issues, failed {len(failed)} recommendations on {unique_failed} issues"
     )
     return {"applied": applied, "failed": failed}
 
@@ -451,7 +449,7 @@ def run_triage(
 
     # Only log JQL if using default filter (custom filters may contain customer data)
     if jql_filter is None:
-        logger.info(f"Running triage with default JQL filter")
+        logger.info("Running triage with default JQL filter")
     else:
         logger.info("Running triage with custom JQL filter (not logged for privacy)")
 
@@ -507,8 +505,8 @@ def run_triage(
     classified = classify_recommendations(recommendations, confidence_threshold)
 
     # Count unique issues (not fields)
-    unique_total = len(set(item["ticket"] for item in recommendations))
-    unique_auto_apply = len(set(item["ticket"] for item in classified["auto_apply"]))
+    unique_total = len({item["ticket"] for item in recommendations})
+    unique_auto_apply = len({item["ticket"] for item in classified["auto_apply"]})
 
     # Build detailed ticket information for display (includes SKIP to show what's already set)
     auto_apply_items = build_ticket_details(classified["all"], token_storage, user_id)
@@ -526,16 +524,13 @@ def run_triage(
 
     # Apply all recommendations (if not dry-run)
     if not dry_run and classified["auto_apply"]:
-        unique_apply_count = len(set(item["ticket"] for item in classified["auto_apply"]))
-        logger.info(
-            f"Applying {len(classified['auto_apply'])} recommendations "
-            f"to {unique_apply_count} issues"
-        )
+        unique_apply_count = len({item["ticket"] for item in classified["auto_apply"]})
+        logger.info(f"Applying {len(classified['auto_apply'])} recommendations to {unique_apply_count} issues")
         apply_results = apply_recommendations(classified["auto_apply"], token_storage, user_id)
 
         # Count unique issues (not fields)
-        unique_applied = len(set(item["ticket"] for item in apply_results["applied"]))
-        unique_failed = len(set(item["ticket"] for item in apply_results["failed"]))
+        unique_applied = len({item["ticket"] for item in apply_results["applied"]})
+        unique_failed = len({item["ticket"] for item in apply_results["failed"]})
 
         # Build detailed ticket information with team and component assignments
         applied_items = build_ticket_details(apply_results["applied"], token_storage, user_id)
@@ -546,11 +541,8 @@ def run_triage(
         results["applied_items"] = applied_items
         results["failed_items"] = failed_items
     elif dry_run:
-        unique_auto_apply_count = len(set(item["ticket"] for item in classified["auto_apply"]))
-        logger.info(
-            f"Dry-run mode: Would apply {len(classified['auto_apply'])} recommendations "
-            f"to {unique_auto_apply_count} issues"
-        )
+        unique_auto_apply_count = len({item["ticket"] for item in classified["auto_apply"]})
+        logger.info(f"Dry-run mode: Would apply {len(classified['auto_apply'])} recommendations to {unique_auto_apply_count} issues")
 
     return results
 

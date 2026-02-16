@@ -1,0 +1,33 @@
+Category,Topic,Guideline/Issue,Recommendation/Solution,Example,Reference
+Prompt Engineering Principles,Principle 1: Explicit Tool Mapping,Abstract action names force the LLM to guess which tool to use.,"Use actual function names like get_issue(), get_issues_by_team() instead of abstract descriptions. The agent knows exactly which function to call and what parameters it needs.","Good: Use get_issues_by_team(release_version, team_ids)
+Bad: Run Retrieve Issues by Team",Prompt Engineering Best Practices
+Prompt Engineering Principles,Principle 2: DRY (Don't Repeat Yourself),Duplication wastes tokens and creates ambiguity.,"Define concepts once, reference them elsewhere. Remove TODO sections and empty placeholders. Each token counts toward context limits.","Define query once with [RELEASE_VERSION] placeholder, reference it for all freeze milestones",Prompt Engineering Best Practices
+Prompt Engineering Principles,Principle 3: Conciseness - Assume the LLM is Smart,Verbose meta-instructions about 'how to think' waste tokens.,"Modern LLMs already know how to reason step-by-step. Don't teach them HOW to think, just WHAT to produce. Remove instructions like 'announce your findings,' 'commit to checking X first.'","Good: Data Sources (priority order): 1. Jira 2. Spreadsheet
+Bad: Before retrieving data, identify sources, announce findings, commit to checking Jira first...",Prompt Engineering Best Practices
+Prompt Engineering Principles,Principle 4: Outcome-Focused Instructions,Procedural 'do-this-then-that' steps constrain the agent's path-finding.,"Lead with the destination (desired output), not the journey (procedure). Structure as Output → Data Requirements → Template, not Step 1 → Step 2 → Output.","Good: Output: Slack message
+Data Requirements: 1. Freeze date 2. Team counts
+Template: [template]
+Bad: Step 1: Get date, Step 2: Get teams, Step 3: Fill template",Prompt Engineering Best Practices
+Prompt Engineering Principles,Principle 5: Format Targeting (Destination + Delivery Method),Output format must match BOTH platform AND delivery method. Slack has TWO formatting systems: mrkdwn (API) and Markdown (paste).,For copy-paste workflows use Markdown [text](url). For API/webhook use mrkdwn <url|text>. Match format to delivery method.,"Markdown (paste): [71](https://jira.com/...)
+mrkdwn (API): <https://jira.com/...|71>",Prompt Engineering Best Practices
+Common Pitfalls,Empty Section Placeholders,Empty sections with TODO comments waste tokens.,Remove empty sections. They create confusion and waste context space.,"Remove: ## Announce Code Freeze
+(no content - TODO)",Common Pitfalls to Avoid
+Common Pitfalls,Mixing Formatting Syntaxes,Mixing Markdown and mrkdwn in same template.,Pick ONE syntax and use consistently throughout a template.,"Bad: *RHDH 1.9.0 <url|Feature Freeze> Update*
+(Markdown bold + mrkdwn link)",Common Pitfalls to Avoid
+Common Pitfalls,Triple-Duplicated Queries,Same JQL query repeated under different section names.,"Define once, reference elsewhere to save tokens.","Define base query once with [RELEASE_VERSION], note it applies to all freeze types",Common Pitfalls to Avoid
+Common Pitfalls,Meta-Commentary About Thinking,Instructions about how to think ('carefully consider...').,"State the constraint, trust the agent to reason. Remove meta-commentary.","Bad: Think carefully about whether Jira has dates
+Good: Check Jira first, fallback to spreadsheet",Common Pitfalls to Avoid
+Common Pitfalls,Abstract Action Names Without Tool Mapping,Using abstract action names instead of function names.,Always use actual function names from toolkit.,"Bad: Run Retrieve Issues by Team
+Good: Use get_issues_by_team(release_version, team_ids)",Common Pitfalls to Avoid
+Troubleshooting,Agent Not Using My Instructions,Agent doesn't follow the extended prompt.,"1. Verify document sharing permissions 2. Check instruction clarity, use concrete function names 3. Contact technical team with doc URL and behavior details",Use get_issue() instead of 'retrieve issue details',Troubleshooting
+Troubleshooting,Document Permission Issues,Technical team reports 'Failed to fetch extended system prompt'.,Fix sharing: Click Share → 'Anyone with link can view' OR add service account email. Verify correct URL shared.,Share: https://docs.google.com/document/d/LONG_ID/edit,Troubleshooting
+Troubleshooting,Changes Not Appearing,Updated doc but agent uses old instructions.,1. Verify editing correct doc (check URL with tech team) 2. Check Markdown syntax errors 3. Request cache refresh from tech team,Copy section into markdownlivepreview.com to verify syntax,Troubleshooting
+Best Practices,Writing Effective Instructions,Instructions should be specific and agent-focused.,"Be specific: describe exact output. Use examples: show formats. Think like agent: instruct the agent, not the user.","Good: Query Jira for status and present to user
+Bad: Users should check Jira for status",Best Practices
+Best Practices,Maintenance Schedule,Regular review keeps prompt accurate.,"Monthly: verify queries work, check Slack channels, review interactions. After process changes: update workflows immediately. After releases: conduct retrospective, gather feedback.",Update Slack channels after team reorganization,Best Practices
+Google Docs Formatting,Headings,Use Format → Paragraph styles for headings.,Converts to Markdown # ## ### syntax. Don't manually make text bigger/bold.,"Heading 1 → # Heading 1
+Heading 2 → ## Heading 2",Formatting Your Prompt
+Google Docs Formatting,Hyperlinks,Use Ctrl+K to create links with descriptive text.,Converts to [text](url) format. Don't paste raw URLs.,"Good: [RHDH Process](url)
+Bad: https://docs.google.com/...",Formatting Your Prompt
+Google Docs Formatting,Code Blocks,Use @ → 'Code blocks' or Insert → Building blocks.,For JQL queries and code snippets. Alternative: Courier New font. Converts to triple backtick format.,Type @ then select 'Code blocks' for JQL query,Formatting Your Prompt
+Google Docs Formatting,Lists,"Use bullet/numbered list buttons, not manual typing.",Clean conversion to Markdown. Use Tab for indentation.,"Use list buttons, press Tab for nested items",Formatting Your Prompt

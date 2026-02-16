@@ -207,7 +207,7 @@ def convert_issue_to_dict(issue: Any, anonymizer: JiraDataAnonymizer) -> dict[st
     target_version = None
     if hasattr(issue.fields, "customfield_12311240") and issue.fields.customfield_12311240:
         if isinstance(issue.fields.customfield_12311240, list):
-            target_version = [v for v in issue.fields.customfield_12311240]
+            target_version = list(issue.fields.customfield_12311240)
         else:
             target_version = [issue.fields.customfield_12311240]
 

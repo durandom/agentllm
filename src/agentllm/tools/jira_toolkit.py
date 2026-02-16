@@ -222,6 +222,45 @@ class JiraTools(Toolkit):
 
         return self._jira_client
 
+    def _search_issues_with_logging(self, jql_query: str, description: str = "Query", **kwargs) -> Any:
+        """Centralized wrapper for all Jira search_issues calls with consistent INFO-level logging.
+
+        This method ensures every JQL query is logged at INFO level with timing information,
+        making it easy to track all API calls in production.
+
+        Args:
+            jql_query: JQL query string
+            description: Human-readable description of what this query does (for logs)
+            **kwargs: All arguments to pass to jira.search_issues (maxResults, fields, expand, json_result, etc.)
+
+        Returns:
+            Result from jira.search_issues() call
+        """
+        jira = self._get_jira_client()
+
+        # Truncate long queries for logging (keep first 100 chars)
+        jql_display = jql_query[:100] + "..." if len(jql_query) > 100 else jql_query
+
+        # Extract key parameters for logging
+        max_results = kwargs.get("maxResults", "default")
+        json_result = kwargs.get("json_result", False)
+
+        logger.info(f"JQL Query [{description}]: {jql_display} (maxResults={max_results}, json_result={json_result})")
+
+        start_time = time.time()
+        result = jira.search_issues(jql_query, **kwargs)
+        elapsed = time.time() - start_time
+
+        # Log result info based on response type
+        if json_result:
+            total = result.get("total", 0) if isinstance(result, dict) else "unknown"
+            logger.info(f"JQL Query completed in {elapsed:.2f}s - Total: {total}")
+        else:
+            count = len(result) if hasattr(result, "__len__") else "unknown"
+            logger.info(f"JQL Query completed in {elapsed:.2f}s - Retrieved: {count} issues")
+
+        return result
+
     def _extract_github_pr_urls(self, text: str) -> list[str]:
         """Extract GitHub PR URLs from text.
 
@@ -423,6 +462,11 @@ class JiraTools(Toolkit):
     def get_issue(self, issue_key: str, include_all_comments: bool = True) -> str:
         """Retrieve detailed information about a Jira issue.
 
+        **Use When:**
+        - Need complete details for a single issue including description and comments
+        - Investigating a specific issue in depth
+        - Need to read issue descriptions or comment threads
+
         Args:
             issue_key: The key of the issue to retrieve (e.g., PROJ-123)
             include_all_comments: Whether to fetch all comments (default: True)
@@ -471,6 +515,12 @@ class JiraTools(Toolkit):
 
     def get_issues_stats(self, jql_query: str) -> str:
         """Get issue statistics with breakdown by type, status, and priority.
+
+        **Use When:**
+        - Need total counts only (no issue details required)
+        - Answering "how many" questions
+        - Need breakdowns by type/status/priority
+        - Optimizing for performance (lightweight query)
 
         This is a lightweight tool optimized for statistics - it returns ONLY metadata,
         no issue details. Use this when you need counts and breakdowns without listing issues.
@@ -527,6 +577,11 @@ class JiraTools(Toolkit):
     def get_fix_versions(self, jql_query: str, max_results: int = 10) -> str:
         """Get unique fix versions from issues matching a JQL query.
 
+        **Use When:**
+        - Need to extract unique fix version names from issues
+        - Identifying current or upcoming release versions
+        - Finding all versions in a project or component
+
         This is a lightweight tool optimized for extracting fix versions without
         fetching full issue details. Use this when you need to identify release
         versions (e.g., "What's the current release?").
@@ -553,11 +608,10 @@ class JiraTools(Toolkit):
             logger.debug(f"Getting fix versions with JQL: {jql_query}")
             logger.debug(f"Max results: {max_results}")
 
-            jira = self._get_jira_client()
-
             # Fetch minimal issue data (just fixVersions field)
-            logger.debug("Executing JQL search for fix versions")
-            issues = jira.search_issues(jql_query, maxResults=max_results, fields="fixVersions")
+            issues = self._search_issues_with_logging(
+                jql_query, description="Get fix versions", maxResults=max_results, fields="fixVersions"
+            )
 
             logger.debug(f"Found {len(issues)} issues")
 
@@ -591,6 +645,14 @@ class JiraTools(Toolkit):
     def get_issues_summary(self, jql_query: str, max_results: int = 50) -> str:
         """Get Jira issues with minimal fields (key, summary, status).
 
+        **Use When:**
+        - Need to display issues to user with minimal fields
+        - Optimized for basic listings (key, summary, status only)
+        - "Show me..." or "List..." queries where full details aren't needed
+
+        **DO NOT Use For:**
+        - Counting issues ("How many...?" questions) → Use get_issues_stats() instead
+
         This is optimized for listing issues when you don't need full details.
         Includes summary metadata for context. Use this for "Show me...", "List..." queries.
 
@@ -623,6 +685,15 @@ class JiraTools(Toolkit):
         include_summary: bool = True,
     ) -> str:
         """Get detailed Jira issue information using a JQL query with custom field selection.
+
+        **Use When:**
+        - Need issues with specific custom fields selected
+        - When default fields in get_issues_summary() are insufficient
+        - Need to access custom field data (epic_link, target_version, etc.)
+
+        **DO NOT Use For:**
+        - Counting issues ("How many...?" questions) → Use get_issues_stats() instead
+        - This tool fetches full issue data which is wasteful for counts
 
         **PAGINATION WARNING**: This tool returns at most `max_results` issues (default: 50).
         Check `summary.has_more` to see if there are more results. The `summary.total_count`
@@ -665,23 +736,15 @@ class JiraTools(Toolkit):
             requested_fields = [f.strip() for f in fields.split(",")]
             logger.debug(f"Requested fields: {requested_fields}")
 
-            jira = self._get_jira_client()
-
             # First, get total count with maxResults=0 for accurate summary
-            logger.debug("Getting total count for summary")
-            start_time = time.time()
             # Use json_result=True to avoid fetching all issues (30x faster!)
-            count_result = jira.search_issues(jql_query, maxResults=0, json_result=True)
+            count_result = self._search_issues_with_logging(jql_query, description="Get total count", maxResults=0, json_result=True)
             total_count = count_result.get("total", 0)
-            elapsed = time.time() - start_time
-            logger.info(f"Count query completed in {elapsed:.2f}s - Total: {total_count}")
 
             # Now fetch the actual issues up to max_results
-            logger.info(f"Fetching {max_results} issues with expanded fields (changelog)")
-            start_time = time.time()
-            issues = jira.search_issues(jql_query, maxResults=max_results, expand="renderedFields,changelog")
-            elapsed = time.time() - start_time
-            logger.info(f"Issue fetch completed in {elapsed:.2f}s - Retrieved: {len(issues)} issues")
+            issues = self._search_issues_with_logging(
+                jql_query, description="Get issues detailed", maxResults=max_results, expand="renderedFields,changelog"
+            )
 
             logger.debug(f"Found {len(issues)} issues in current page (total: {total_count})")
 
@@ -817,6 +880,10 @@ class JiraTools(Toolkit):
     def add_comment(self, issue_key: str, comment: str) -> str:
         """Add a comment to a Jira issue.
 
+        **Use When:**
+        - Need to add a comment to an existing issue
+        - Posting updates, questions, or status information to tickets
+
         Args:
             issue_key: The key of the issue to comment on
             comment: The comment text to add
@@ -858,6 +925,10 @@ class JiraTools(Toolkit):
         labels: list[str] | None = None,
     ) -> str:
         """Create a new Jira issue.
+
+        **Use When:**
+        - Need to create a new Jira issue programmatically
+        - Automating issue creation from templates or patterns
 
         Args:
             project_key: The key of the project to create the issue in
@@ -924,6 +995,10 @@ class JiraTools(Toolkit):
     def extract_sprint_info(self, issue_key: str) -> str:
         """Extract sprint ID and name from an issue.
 
+        **Use When:**
+        - Need to extract sprint ID and name from an issue
+        - Finding the current sprint for a set of issues
+
         Args:
             issue_key: The key of the issue to extract sprint info from
 
@@ -981,6 +1056,11 @@ class JiraTools(Toolkit):
     ) -> str:
         """Get accurate issue counts by team for a release without pagination issues.
 
+        **Use When:**
+        - Need per-team breakdowns
+        - ALWAYS use this for team counts (not manual counting)
+        - Optional base_jql for freeze-specific queries
+
         This tool runs efficient count queries (maxResults=0) for each team to get
         accurate counts without fetching all issues. Solves the pagination problem
         where sampling first 50 issues gives incorrect team distributions.
@@ -1020,8 +1100,6 @@ class JiraTools(Toolkit):
             logger.debug(f"Getting issue counts by team for release {release_version}")
             logger.debug(f"Team IDs: {team_ids}")
 
-            jira = self._get_jira_client()
-
             # Build base JQL query
             jql_parts = []
 
@@ -1035,17 +1113,12 @@ class JiraTools(Toolkit):
             base_jql_query = " AND ".join(jql_parts)
 
             # Get total count for the release
-            logger.debug(f"Getting total count for release {release_version}")
-            start_time = time.time()
-
             # CRITICAL: Use json_result=True to avoid fetching all issues!
             # When json_result=False (default), the library ignores maxResults=0 and fetches ALL issues
-            logger.info(f"Querying Jira for total count: {base_jql_query[:100]}...")
-            total_result = jira.search_issues(base_jql_query, maxResults=0, json_result=True)
-
-            elapsed = time.time() - start_time
+            total_result = self._search_issues_with_logging(
+                base_jql_query, description=f"Total count for release {release_version}", maxResults=0, json_result=True
+            )
             total_count = total_result.get("total", 0)
-            logger.info(f"Jira API call completed in {elapsed:.2f}s - Total count: {total_count}")
 
             # Get count for each team in PARALLEL for better performance
             team_counts = {}
@@ -1056,14 +1129,10 @@ class JiraTools(Toolkit):
                     team_jql = f"{base_jql_query} AND team = {team_id}"
 
                     # Query Jira for team count (use json_result=True to avoid fetching all issues)
-                    logger.info(f"Querying team {team_id}: {team_jql[:100]}...")
-                    start_time = time.time()
-
-                    team_result = jira.search_issues(team_jql, maxResults=0, json_result=True)
-
-                    elapsed = time.time() - start_time
+                    team_result = self._search_issues_with_logging(
+                        team_jql, description=f"Team {team_id} count", maxResults=0, json_result=True
+                    )
                     team_count = team_result.get("total", 0)
-                    logger.info(f"Jira API call for team {team_id} completed in {elapsed:.2f}s - Count: {team_count}")
                     return team_id, team_count
                 except Exception as e:
                     logger.error(f"Failed to query team {team_id}: {e}")
@@ -1110,6 +1179,10 @@ class JiraTools(Toolkit):
     def get_sprint_metrics(self, sprint_id: str) -> str:
         """Calculate sprint metrics by running multiple JQL queries.
 
+        **Use When:**
+        - Need sprint statistics - planned vs closed, breakdown by type
+        - Generating sprint reviews or reports
+
         This function performs multiple search queries to calculate:
         - Total planned tickets: Sprint = {sprint_id}
         - Total closed tickets: Sprint = {sprint_id} AND resolution = done
@@ -1131,7 +1204,6 @@ class JiraTools(Toolkit):
         """
         try:
             logger.debug(f"Calculating sprint metrics for sprint_id={sprint_id}")
-            jira = self._get_jira_client()
 
             jql_total_planned = f"Sprint = {sprint_id}"
             jql_total_closed = f"Sprint = {sprint_id} AND resolution = done"
@@ -1139,23 +1211,30 @@ class JiraTools(Toolkit):
             jql_bugs_closed = f"Sprint = {sprint_id} AND resolution = done AND type = Bug"
 
             logger.info(f"Fetching sprint metrics for sprint {sprint_id} (4 queries)")
-            metrics_start = time.time()
 
             # Use json_result=True for all count queries (30x faster!)
-            total_planned_results = jira.search_issues(jql_total_planned, maxResults=0, json_result=True)
+            total_planned_results = self._search_issues_with_logging(
+                jql_total_planned, description=f"Sprint {sprint_id} total planned", maxResults=0, json_result=True
+            )
             total_planned = total_planned_results.get("total", 0)
 
-            total_closed_results = jira.search_issues(jql_total_closed, maxResults=0, json_result=True)
+            total_closed_results = self._search_issues_with_logging(
+                jql_total_closed, description=f"Sprint {sprint_id} total closed", maxResults=0, json_result=True
+            )
             total_closed = total_closed_results.get("total", 0)
 
-            stories_tasks_results = jira.search_issues(jql_stories_tasks_closed, maxResults=0, json_result=True)
+            stories_tasks_results = self._search_issues_with_logging(
+                jql_stories_tasks_closed,
+                description=f"Sprint {sprint_id} stories/tasks closed",
+                maxResults=0,
+                json_result=True,
+            )
             stories_tasks_closed = stories_tasks_results.get("total", 0)
 
-            bugs_results = jira.search_issues(jql_bugs_closed, maxResults=0, json_result=True)
+            bugs_results = self._search_issues_with_logging(
+                jql_bugs_closed, description=f"Sprint {sprint_id} bugs closed", maxResults=0, json_result=True
+            )
             bugs_closed = bugs_results.get("total", 0)
-
-            metrics_elapsed = time.time() - metrics_start
-            logger.info(f"Sprint metrics queries completed in {metrics_elapsed:.2f}s")
 
             result = {
                 "sprint_id": sprint_id,
@@ -1183,6 +1262,10 @@ class JiraTools(Toolkit):
         labels: str | None = None,
     ) -> str:
         """Update an existing Jira issue.
+
+        **Use When:**
+        - Need to update fields on an existing issue
+        - Modifying team assignment, components, summary, description, assignee, or labels
 
         This tool allows updating various fields of a Jira issue including team assignment,
         components, summary, description, assignee, and labels.

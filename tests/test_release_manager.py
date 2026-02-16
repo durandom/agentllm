@@ -84,7 +84,7 @@ class TestToolkitConfiguration:
 
         # Mock GoogleDrive as configured so we can test Jira prompting
         with patch.object(agent.toolkit_configs[0], "is_configured", return_value=True):
-            # Mock SystemPromptExtensionConfig as configured (it depends on GDrive)
+            # Mock ReleaseManagerToolkitConfig as configured (it depends on GDrive)
             with patch.object(agent.toolkit_configs[2], "is_configured", return_value=True):
                 # Add a required toolkit config (mock JiraConfig as required)
                 with patch.object(JiraConfig, "is_required", return_value=True):
@@ -104,7 +104,7 @@ class TestToolkitConfiguration:
         """Test that Google Drive is required (like all toolkits)."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
-        # Should have GoogleDriveConfig, JiraConfig, and SystemPromptExtensionConfig
+        # Should have GoogleDriveConfig, JiraConfig, and ReleaseManagerToolkitConfig
         assert len(agent.toolkit_configs) == 3
         gdrive_config = agent.toolkit_configs[0]
         assert gdrive_config.is_required(), "GoogleDriveConfig should be required"
@@ -439,7 +439,7 @@ class TestRequiredVsOptionalConfigs:
         """Test that GoogleDriveConfig is required."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
-        # Should have GoogleDriveConfig, JiraConfig, and SystemPromptExtensionConfig
+        # Should have GoogleDriveConfig, JiraConfig, and ReleaseManagerToolkitConfig
         assert len(agent.toolkit_configs) == 3
         gdrive_config = agent.toolkit_configs[0]
         assert gdrive_config.is_required(), "GoogleDriveConfig should be required"
@@ -449,7 +449,7 @@ class TestRequiredVsOptionalConfigs:
         """Test that required configs prevent agent usage until configured."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
-        # Mock GoogleDrive and SystemPromptExtension as configured so we can test Jira
+        # Mock GoogleDrive and ReleaseManagerToolkit as configured so we can test Jira
         with patch.object(agent.toolkit_configs[0], "is_configured", return_value=True):
             with patch.object(agent.toolkit_configs[2], "is_configured", return_value=True):
                 # Add a required config (JiraConfig is required by default)

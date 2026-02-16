@@ -40,88 +40,289 @@ if not os.getenv("AGENTLLM_TOKEN_ENCRYPTION_KEY"):
     )
 
 
-# Test scenarios with validation criteria
-# These scenarios are derived from the Release Manager System Prompt:
-# - Release status tracking (Jira queries)
-# - Release schedule management (Google Drive + Jira)
-# - Risk identification (blocker bugs, CVEs, unassigned work)
-# - Communication preparation (code freeze announcements, release updates)
-# - Proactive monitoring (scope creep, missing artifacts)
+# Test scenarios with validation criteria - PROGRESSIVE COMPLEXITY STRUCTURE
+#
+# Scenarios are organized by complexity level (L1-L4):
+#   Level 1: Single-Toolkit Scenarios (basic queries, simple reasoning)
+#   Level 2: Cross-Toolkit Coordination (combine data from multiple sources)
+#   Level 3: Structured Workflows (multi-step processes with templates)
+#   Level 4: Advanced Analysis (complex reasoning, risk analysis, count accuracy)
+#
+# Run by level: pytest -k "level_1" tests/test_release_manager_scenarios.py -v -m integration
+# Run specific: pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario[L1_01] -v -s -m integration
 
 TEST_SCENARIOS = [
+    # =============================================================================
+    # LEVEL 1: Single-Toolkit Scenarios (Basic Operations)
+    # =============================================================================
+    # These test basic toolkit access and simple queries. Each uses ONE toolkit
+    # and validates the agent can retrieve data correctly.
     {
         "id": 1,
-        "category": "Release Status Query",
-        "question": "What's the status of the current release?",
-        "expected_keywords": ["release", "status", "features", "progress"],
+        "level": 1,
+        "category": "Workbook - List Queries",
+        "question": "What Jira queries are available in the workbook?",
+        "expected_keywords": ["query", "jira", "available"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to query current release status and provide progress metrics",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests ability to access workbook toolkit and list available queries",
     },
     {
         "id": 2,
-        "category": "Risk Identification - Blocker Bugs",
-        "question": "Are there any blocker bugs in the current release?",
-        "expected_keywords": ["blocker", "bug", "priority"],
+        "level": 1,
+        "category": "Workbook - Get Template",
+        "question": "Show me the Feature Freeze Update template",
+        "expected_keywords": ["feature freeze", "template", "release"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to identify and report blocker bugs using Jira queries",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests ability to retrieve Slack template from workbook with placeholders",
     },
     {
         "id": 3,
-        "category": "Release Schedule Information",
-        "question": "When is the next feature freeze?",
-        "expected_keywords": ["feature freeze", "date", "schedule"],
+        "level": 1,
+        "category": "Jira - Simple Count",
+        "question": "How many issues are open in fixVersion 1.9.0?",
+        "expected_keywords": ["1.9.0", "issues", "open"],
         "should_cite_source": True,
-        "knowledge_type": "gdrive",
-        "description": "Tests ability to query release schedule from Google Drive documents",
+        "knowledge_type": "jira",
+        "description": "L1: Tests basic Jira count query (single JQL, no complex filtering)",
     },
     {
         "id": 4,
-        "category": "JQL Query Construction",
-        "question": "Show me all features in the current release that are still in progress",
-        "expected_keywords": ["feature", "in progress", "jira"],
+        "level": 1,
+        "category": "Jira - Issue Lookup",
+        "question": "Are there any blocker bugs in the 1.9 release?",
+        "expected_keywords": ["blocker", "bug", "priority"],
         "should_cite_source": True,
         "knowledge_type": "jira",
-        "description": "Tests ability to construct JQL queries for feature tracking",
+        "description": "L1: Tests Jira query with priority filter (single condition)",
     },
     {
         "id": 5,
-        "category": "Code Freeze Communication",
-        "question": "Create a code freeze announcement for the current release",
-        "expected_keywords": ["code freeze", "cherry-pick", "blocker", "cve"],
+        "level": 1,
+        "category": "Workflow - Instructions",
+        "question": "How do I generate a release status update?",
+        "expected_keywords": ["release status", "workflow", "instructions"],
         "should_cite_source": True,
-        "knowledge_type": "multi",
-        "description": "Tests ability to generate code freeze announcements with all required data",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests workflow instruction retrieval (no execution)",
     },
     {
         "id": 6,
-        "category": "CVE Tracking",
-        "question": "What CVEs are outstanding for the current release?",
-        "expected_keywords": ["cve", "security", "vulnerability"],
+        "level": 1,
+        "category": "Workbook - Project Config",
+        "question": "What are the Jira project keys used for tracking?",
+        "expected_keywords": ["rhidp", "rhdhplan", "jira", "project"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests ability to track and report on security vulnerabilities",
+        "knowledge_type": "workbook",
+        "description": "L1: Tests project configuration retrieval by category",
     },
     {
         "id": 7,
-        "category": "JQL Count Accuracy - Feature Demos",
-        "question": "How many features are tagged for demos in version 1.9.0?",
-        "expected_keywords": ["feature", "demo", "1.9.0"],
+        "level": 1,
+        "category": "Workbook - Tool Reference",
+        "question": "Show me documentation for the get_issues_by_team tool",
+        "expected_keywords": ["team", "parameters", "returns", "tool"],
         "should_cite_source": True,
-        "knowledge_type": "jira",
-        "description": "Tests accurate counting of JQL results - validates agent reports complete count, not just first page of results. Issue: agent previously reported 25 when actual count was 32.",
-        "validation_type": "count_accuracy",
-        "jql_query": 'issuetype = Feature AND fixVersion = "1.9.0" AND labels = demo',
+        "knowledge_type": "workbook",
+        "description": "L1: Tests tool reference documentation retrieval",
     },
     {
         "id": 8,
-        "category": "Feature Freeze Announcement",
+        "level": 1,
+        "category": "Workbook - Prompt Retrieval",
+        "question": "Show me the feature_freeze_prep prompt",
+        "expected_keywords": ["feature freeze", "prep", "verify"],
+        "should_cite_source": True,
+        "knowledge_type": "workbook",
+        "description": "L1: Tests situational prompt retrieval from Prompts sheet",
+    },
+    {
+        "id": 9,
+        "level": 1,
+        "category": "Workbook - List Workflows",
+        "question": "List all available workflows in the workbook",
+        "expected_keywords": ["workflow", "retrieving", "announce"],
+        "should_cite_source": True,
+        "knowledge_type": "workbook",
+        "description": "L1: Tests listing all workflow names",
+    },
+    {
+        "id": 10,
+        "level": 1,
+        "category": "Jira - Get Issue",
+        "question": "Get details for issue RHIDP-15779",
+        "expected_keywords": ["rhidp-15779", "issue", "status"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests single issue retrieval with full details",
+    },
+    {
+        "id": 11,
+        "level": 1,
+        "category": "Jira - Fix Versions",
+        "question": "What fix versions exist in the RHIDP project?",
+        "expected_keywords": ["version", "rhidp", "fix"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests fix version extraction from project",
+    },
+    {
+        "id": 12,
+        "level": 1,
+        "category": "Jira - Sprint Info",
+        "question": "What sprint is issue RHIDP-15779 in?",
+        "expected_keywords": ["sprint", "rhidp-15779"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests sprint information extraction from issue",
+    },
+    {
+        "id": 13,
+        "level": 1,
+        "category": "Jira - Active Release Dates",
+        "question": "What are the key dates for active releases?",
+        "expected_keywords": ["release", "date", "freeze", "ga"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L1: Tests release date retrieval from Jira release issues (active_release query)",
+    },
+    {
+        "id": 14,
+        "level": 1,
+        "category": "GDrive - Future Release Dates",
+        "question": "What are the key dates for future releases from the release schedule spreadsheet?",
+        "expected_keywords": ["release", "date", "schedule", "future"],
+        "should_cite_source": True,
+        "knowledge_type": "gdrive",
+        "description": "L1: Tests Google Drive retrieval of future release dates from release schedule spreadsheet",
+    },
+    {
+        "id": 15,
+        "level": 1,
+        "category": "GDrive - Team Mappings",
+        "question": "List all active RHDH teams with their leads and Slack handles",
+        "expected_keywords": ["team", "lead", "slack", "active"],
+        "should_cite_source": True,
+        "knowledge_type": "gdrive",
+        "description": "L1: Tests Google Drive retrieval of team mappings from RHDH Team spreadsheet",
+    },
+    # =============================================================================
+    # LEVEL 2: Cross-Toolkit Coordination (Data Combination)
+    # =============================================================================
+    # These test the agent's ability to combine data from multiple toolkits.
+    # Requires understanding relationships between different data sources.
+    {
+        "id": 16,
+        "level": 2,
+        "category": "JQL Template Application",
+        "question": "Use the 'open_issues_by_type' query template for version 1.9.0 with issuetype=Feature",
+        "expected_keywords": ["1.9.0", "feature", "jira"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L2: Tests retrieving workbook template, substituting placeholders, executing Jira query",
+    },
+    {
+        "id": 17,
+        "level": 2,
+        "category": "Release Status Query",
+        "question": "What's the status of release 1.9.0?",
+        "expected_keywords": ["release", "status", "1.9.0", "progress"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L2: Tests aggregating multiple Jira metrics (open/closed, by type)",
+    },
+    {
+        "id": 18,
+        "level": 2,
+        "category": "CVE Tracking",
+        "question": "What CVEs are outstanding for release 1.9.0?",
+        "expected_keywords": ["cve", "security", "vulnerability", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L2: Tests security-specific filtering and interpretation",
+    },
+    {
+        "id": 19,
+        "level": 2,
+        "category": "GDrive + Jira - Team Issue Counts",
+        "question": "Get open issue counts by team for release 1.9.0",
+        "expected_keywords": ["team", "1.9.0", "count", "issues"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L2: Tests retrieving teams from GDrive, then querying Jira with team filters",
+    },
+    # =============================================================================
+    # LEVEL 3: Structured Workflows (Multi-Step Processes)
+    # =============================================================================
+    # These test multi-step processes that follow workflow instructions.
+    # Requires planning, data gathering, and template filling.
+    {
+        "id": 20,
+        "level": 3,
+        "category": "Code Freeze - Simple",
+        "question": "Create a code freeze announcement for release 1.9.0",
+        "expected_keywords": ["code freeze", "1.9.0", "release"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L3: Tests template retrieval + 2-3 Jira queries + placeholder substitution",
+    },
+    {
+        "id": 21,
+        "level": 3,
+        "category": "Team Breakdown",
+        "question": "Break down open issues by team for release 1.9.0",
+        "expected_keywords": ["team", "1.9.0", "breakdown"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L3: Tests parallel team queries using get_issues_by_team() tool",
+    },
+    {
+        "id": 22,
+        "level": 3,
+        "category": "Feature Freeze - Full",
         "question": "Create a Feature Freeze Update announcement for release 1.9",
         "expected_keywords": ["feature freeze", "1.9"],
         "should_cite_source": True,
         "knowledge_type": "multi",
-        "description": "Tests ability to generate feature freeze announcements using local system prompt template. Validates that the agent can access release context from the local file and query Jira for relevant data.",
+        "description": "L3: Tests complex template with multiple data sources and placeholder filling",
+    },
+    # =============================================================================
+    # LEVEL 4: Advanced Analysis (Complex Reasoning & Accuracy)
+    # =============================================================================
+    # These test advanced capabilities: accuracy validation, risk analysis,
+    # proactive suggestions, and multi-factor reasoning.
+    {
+        "id": 23,
+        "level": 4,
+        "category": "Count Accuracy - Feature Demos",
+        "question": "How many features are tagged for demos in version 1.9.0?",
+        "expected_keywords": ["feature", "demo", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L4: Tests count accuracy (pagination handling) - must report complete count, not sample",
+        "validation_type": "count_accuracy",
+        "jql_query": 'issuetype = Feature AND fixVersion = "1.9.0" AND labels = demo',
+    },
+    {
+        "id": 24,
+        "level": 4,
+        "category": "Risk Analysis",
+        "question": "What are the top 3 risks for releasing version 1.9.0 on time?",
+        "expected_keywords": ["risk", "1.9.0", "blocker"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "L4: Tests multi-query analysis, correlation, prioritization, recommendations",
+    },
+    {
+        "id": 25,
+        "level": 4,
+        "category": "JQL Query Construction",
+        "question": "Show me all features in release 1.9.0 that are still in progress",
+        "expected_keywords": ["feature", "in progress", "jira", "1.9.0"],
+        "should_cite_source": True,
+        "knowledge_type": "jira",
+        "description": "L4: Tests complex JQL construction with multiple filters (issuetype + status + fixVersion)",
     },
 ]
 
@@ -146,6 +347,407 @@ def get_configured_user_id() -> str | None:
         return user_id if user_id else None
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
+
+
+# Markdown logging helper functions
+def truncate_string(text: str, max_length: int) -> str:
+    """Truncate a string to max_length with '...' suffix if needed.
+
+    Args:
+        text: String to truncate
+        max_length: Maximum length before truncation
+
+    Returns:
+        Truncated string with '... (truncated, full length: N chars)' if over limit
+    """
+    if len(text) <= max_length:
+        return text
+    return f"{text[:max_length]}\n... (truncated, full length: {len(text)} chars)"
+
+
+def format_tool_call(tool, index: int) -> str:
+    """Format a single tool call as markdown with expandable details.
+
+    Args:
+        tool: ToolExecution object from Agno
+        index: Tool call number (1-based)
+
+    Returns:
+        Formatted markdown string with tool call details
+    """
+    # Check for error status
+    has_error = hasattr(tool, "tool_call_error") and tool.tool_call_error
+    status = "❌ Error" if has_error else "✅ Success"
+
+    md = [f"<details open>\n<summary>🔧 Tool Call {index}: {getattr(tool, 'tool_name', 'Unknown')}</summary>\n\n"]
+    md.append(f"**Tool Call ID**: `{getattr(tool, 'tool_call_id', 'N/A')}`  \n")
+    md.append(f"**Status**: {status}\n\n")
+
+    # Arguments
+    md.append("#### Arguments\n\n")
+    if hasattr(tool, "tool_args") and tool.tool_args:
+        args_json = json.dumps(tool.tool_args, indent=2, ensure_ascii=False)
+        md.append(f"```json\n{truncate_string(args_json, 2000)}\n```\n\n")
+    else:
+        md.append("_No arguments_\n\n")
+
+    # Result (truncate if > 1000 chars)
+    md.append("#### Result\n\n")
+    if hasattr(tool, "result") and tool.result:
+        result_text = str(tool.result)
+        if len(result_text) > 1000:
+            md.append(f"```text\n{result_text[:1000]}\n... (truncated, full result: {len(result_text)} chars)\n```\n\n")
+        else:
+            md.append(f"```text\n{result_text}\n```\n\n")
+    else:
+        md.append("_No result_\n\n")
+
+    # Error details if present
+    if has_error:
+        md.append("#### Error\n\n")
+        md.append(f"```text\n{getattr(tool, 'tool_call_error', 'Unknown error')}\n```\n\n")
+
+    md.append("</details>")
+    return "".join(md)
+
+
+def generate_scenario_markdown(
+    scenario: dict,
+    response,
+    validation_messages: list[str],
+    start_time: float,
+    end_time: float,
+    status: str,
+) -> str:
+    """Generate complete markdown log for a scenario test.
+
+    Args:
+        scenario: Test scenario dictionary
+        response: Agno RunOutput object
+        validation_messages: List of validation result messages
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        status: Test status (PASSED, PARTIAL, FAILED)
+
+    Returns:
+        Complete markdown content for the scenario log
+    """
+
+    md = []
+
+    # Header with status badge
+    status_emoji = {"PASSED": "✅", "PARTIAL": "⚠️", "FAILED": "❌"}.get(status, "❓")
+    duration = end_time - start_time
+
+    md.append(f"# {status_emoji} {scenario['category']}\n\n")
+    md.append(f"**Status**: {status}  \n")
+    md.append(f"**Timestamp**: {datetime.fromtimestamp(start_time).isoformat()}  \n")
+    md.append(f"**Duration**: {duration:.2f}s\n\n")
+
+    # Metadata section
+    md.append("## Metadata\n\n")
+    md.append(f"- **Level**: {scenario['level']}\n")
+    md.append(f"- **ID**: {scenario['id']}\n")
+    md.append(f"- **Category**: {scenario['category']}\n")
+    md.append(f"- **Knowledge Type**: {scenario['knowledge_type']}\n")
+    md.append(f"- **Description**: {scenario['description']}\n\n")
+
+    # Question
+    md.append("## Question\n\n")
+    md.append(f"```\n{scenario['question']}\n```\n\n")
+
+    # Execution Trace
+    md.append("## Execution Trace\n\n")
+
+    # Reasoning (collapsed for verbosity)
+    md.append("### Reasoning\n\n")
+    if hasattr(response, "reasoning_content") and response.reasoning_content:
+        md.append("<details>\n<summary>View reasoning steps</summary>\n\n")
+        md.append(f"```text\n{truncate_string(str(response.reasoning_content), 5000)}\n```\n\n")
+        md.append("</details>\n\n")
+    elif hasattr(response, "reasoning_steps") and response.reasoning_steps:
+        md.append("<details>\n<summary>View reasoning steps</summary>\n\n")
+        for i, step in enumerate(response.reasoning_steps, 1):
+            md.append(f"**Step {i}**:\n```text\n{truncate_string(str(step), 1000)}\n```\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No reasoning information available_\n\n")
+
+    # Tool Calls (expanded for visibility)
+    md.append("### Tool Calls\n\n")
+    if hasattr(response, "tools") and response.tools:
+        for i, tool in enumerate(response.tools, 1):
+            md.append(format_tool_call(tool, i))
+            md.append("\n\n")
+    else:
+        md.append("_No tools called_\n\n")
+
+    # Response
+    md.append("## Response\n\n")
+    content = str(response.content) if hasattr(response, "content") else str(response)
+    md.append(f"```markdown\n{truncate_string(content, 5000)}\n```\n\n")
+
+    # Response metadata
+    md.append("### Response Metadata\n\n")
+    if hasattr(response, "model"):
+        md.append(f"- **Model**: {response.model}\n")
+    if hasattr(response, "provider"):
+        md.append(f"- **Provider**: {response.provider}\n")
+    md.append("\n")
+
+    # Validation Results
+    md.append("## Validation Results\n\n")
+    passed = sum(1 for msg in validation_messages if "✅" in msg)
+    partial = sum(1 for msg in validation_messages if "⚠️" in msg)
+    failed = sum(1 for msg in validation_messages if "❌" in msg)
+    md.append(f"**Summary**: {passed} passed, {partial} warnings, {failed} failed\n\n")
+    for msg in validation_messages:
+        md.append(f"- {msg}\n")
+    md.append("\n")
+
+    # Metrics
+    md.append("## Metrics\n\n")
+    md.append(f"- **Duration**: {duration:.2f}s\n")
+    md.append(f"- **Response Length**: {len(content)} chars\n")
+
+    # Token counts if available
+    if hasattr(response, "metrics"):
+        metrics = response.metrics
+        if hasattr(metrics, "input_tokens"):
+            md.append(f"- **Input Tokens**: {metrics.input_tokens}\n")
+        if hasattr(metrics, "output_tokens"):
+            md.append(f"- **Output Tokens**: {metrics.output_tokens}\n")
+        if hasattr(metrics, "total_tokens"):
+            md.append(f"- **Total Tokens**: {metrics.total_tokens}\n")
+
+    md.append("\n")
+
+    # Messages (collapsed)
+    md.append("## Messages\n\n")
+    if hasattr(response, "messages") and response.messages:
+        md.append("<details>\n<summary>View full conversation history</summary>\n\n")
+        for i, msg in enumerate(response.messages, 1):
+            role = getattr(msg, "role", "unknown")
+            msg_content = str(getattr(msg, "content", ""))
+            md.append(f"**Message {i} ({role})**:\n```text\n{truncate_string(msg_content, 1000)}\n```\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No message history available_\n\n")
+
+    # Events (collapsed)
+    md.append("## Events\n\n")
+    if hasattr(response, "events") and response.events:
+        md.append("<details>\n<summary>View execution event trace</summary>\n\n")
+        md.append(f"**Total Events**: {len(response.events)}\n\n")
+        for i, event in enumerate(response.events[:50], 1):  # Limit to first 50 events
+            md.append(f"**Event {i}**: {truncate_string(str(event), 500)}\n\n")
+        if len(response.events) > 50:
+            md.append(f"_... and {len(response.events) - 50} more events_\n\n")
+        md.append("</details>\n\n")
+    else:
+        md.append("_No event trace available_\n\n")
+
+    return "".join(md)
+
+
+def save_scenario_log(scenario: dict, markdown_content: str) -> Path | None:
+    """Save scenario markdown log to file if RELEASE_MANAGER_SCENARIO_LOGS is enabled.
+
+    Args:
+        scenario: Test scenario dictionary
+        markdown_content: Generated markdown content
+
+    Returns:
+        Path to saved log file, or None if logging is disabled
+    """
+    # Check if logging is enabled
+    if os.getenv("RELEASE_MANAGER_SCENARIO_LOGS", "").lower() not in ("true", "1", "yes"):
+        return None
+
+    log_dir = Path("tmp/scenario_logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate filename matching pytest ID format
+    level = scenario["level"]
+    scenario_id = scenario["id"]
+    category = scenario["category"].lower().replace(" ", "_").replace("-", "_")
+    filename = f"L{level}_{scenario_id:02d}_{category}.md"
+
+    log_path = log_dir / filename
+    log_path.write_text(markdown_content, encoding="utf-8")
+
+    # Auto-generate index.md
+    index_content = generate_index_markdown(log_dir)
+    index_path = log_dir / "index.md"
+    index_path.write_text(index_content, encoding="utf-8")
+
+    return log_path
+
+
+def generate_index_markdown(log_dir: Path) -> str:
+    """Generate index.md with summary table of all scenario logs.
+
+    Args:
+        log_dir: Directory containing scenario log files
+
+    Returns:
+        Markdown content for index file
+    """
+    md = []
+    md.append("# Release Manager Scenario Test Logs\n\n")
+    md.append(f"**Generated**: {datetime.now().isoformat()}\n\n")
+
+    # Find all log files (not index.md, not comprehensive dirs)
+    log_files = sorted(log_dir.glob("L*.md"))
+
+    if not log_files:
+        md.append("_No scenario logs found_\n")
+        return "".join(md)
+
+    md.append("## Summary\n\n")
+    md.append(f"**Total Scenarios**: {len(log_files)}\n\n")
+
+    # Table
+    md.append("| Level | ID | Category | Status | Duration |\n")
+    md.append("|-------|----|---------:|--------|----------|\n")
+
+    for log_file in log_files:
+        # Parse the first few lines to get status and duration
+        try:
+            content = log_file.read_text(encoding="utf-8")
+            lines = content.split("\n")
+
+            # Extract level and ID from filename
+            filename = log_file.stem
+            parts = filename.split("_")
+            level = parts[0][1:]  # Remove 'L' prefix
+            scenario_id = parts[1]
+
+            # Extract status from first line
+            status = "UNKNOWN"
+            if "✅" in lines[0]:
+                status = "✅ PASSED"
+            elif "⚠️" in lines[0]:
+                status = "⚠️ PARTIAL"
+            elif "❌" in lines[0]:
+                status = "❌ FAILED"
+
+            # Extract category from first line
+            category = lines[0].replace("#", "").replace("✅", "").replace("⚠️", "").replace("❌", "").strip()
+
+            # Extract duration
+            duration = "N/A"
+            for line in lines[:10]:
+                if "**Duration**:" in line:
+                    duration = line.split("**Duration**:")[1].strip()
+                    break
+
+            md.append(f"| {level} | {scenario_id} | [{category}]({log_file.name}) | {status} | {duration} |\n")
+
+        except Exception:
+            # If parsing fails, just list the file
+            md.append(f"| ? | ? | [{log_file.name}]({log_file.name}) | ? | ? |\n")
+
+    md.append("\n")
+
+    # Comprehensive test links
+    comprehensive_dirs = sorted([d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("comprehensive_")])
+    if comprehensive_dirs:
+        md.append("## Comprehensive Test Runs\n\n")
+        for comp_dir in comprehensive_dirs:
+            timestamp = comp_dir.name.replace("comprehensive_", "")
+            summary_file = comp_dir / "comprehensive_summary.md"
+            if summary_file.exists():
+                md.append(f"- [{timestamp}]({comp_dir.name}/comprehensive_summary.md)\n")
+            else:
+                md.append(f"- {timestamp} (no summary)\n")
+        md.append("\n")
+
+    return "".join(md)
+
+
+def generate_comprehensive_summary(results: list[dict], log_dir: Path) -> str:
+    """Generate comprehensive test summary markdown.
+
+    Args:
+        results: List of test result dictionaries
+        log_dir: Directory where comprehensive logs are saved
+
+    Returns:
+        Markdown content for comprehensive summary
+    """
+    md = []
+
+    # Extract timestamp from log_dir name
+    timestamp = log_dir.name.replace("comprehensive_", "")
+
+    md.append(f"# Comprehensive Test Summary - {timestamp}\n\n")
+    md.append(f"**Generated**: {datetime.now().isoformat()}\n\n")
+
+    # Summary stats
+    total = len(results)
+    passed = sum(1 for r in results if r["status"] == "PASSED")
+    partial = sum(1 for r in results if r["status"] == "PARTIAL")
+    failed = sum(1 for r in results if r["status"] == "FAILED")
+
+    md.append("## Summary\n\n")
+    md.append(f"- **Total Scenarios**: {total}\n")
+    md.append(f"- **✅ Passed**: {passed} ({passed / total * 100:.1f}%)\n")
+    md.append(f"- **⚠️ Partial**: {partial} ({partial / total * 100:.1f}%)\n")
+    md.append(f"- **❌ Failed**: {failed} ({failed / total * 100:.1f}%)\n\n")
+
+    # Results by level
+    md.append("## Results by Level\n\n")
+    levels = {}
+    for r in results:
+        # Extract level from description (format: "L{level}: ...")
+        level_match = r["description"].split(":")[0].strip()
+        if level_match not in levels:
+            levels[level_match] = {"total": 0, "passed": 0, "partial": 0, "failed": 0}
+        levels[level_match]["total"] += 1
+        if r["status"] == "PASSED":
+            levels[level_match]["passed"] += 1
+        elif r["status"] == "PARTIAL":
+            levels[level_match]["partial"] += 1
+        elif r["status"] == "FAILED":
+            levels[level_match]["failed"] += 1
+
+    for level in sorted(levels.keys()):
+        stats = levels[level]
+        md.append(f"### {level}\n\n")
+        md.append(f"- Total: {stats['total']}\n")
+        md.append(f"- ✅ Passed: {stats['passed']}\n")
+        md.append(f"- ⚠️ Partial: {stats['partial']}\n")
+        md.append(f"- ❌ Failed: {stats['failed']}\n\n")
+
+    # Detailed results table
+    md.append("## Detailed Results\n\n")
+    md.append("| ID | Category | Status | Keywords | Response Length |\n")
+    md.append("|----|----------|--------|----------|----------------:|\n")
+
+    for r in results:
+        status_emoji = {"PASSED": "✅", "PARTIAL": "⚠️", "FAILED": "❌"}.get(r["status"], "❓")
+        keywords = ", ".join(r.get("found_keywords", []))[:40]
+        log_file = f"L{r.get('level', '?')}_{r['id']:02d}_{r['category'].lower().replace(' ', '_').replace('-', '_')}.md"
+        md.append(f"| {r['id']} | [{r['category']}]({log_file}) | {status_emoji} {r['status']} | {keywords} | {r['response_length']} |\n")
+
+    md.append("\n")
+
+    # Failed scenarios (if any)
+    if failed > 0:
+        md.append("## Failed Scenarios\n\n")
+        for r in results:
+            if r["status"] == "FAILED":
+                md.append(f"### {r['id']}: {r['category']}\n\n")
+                md.append(f"**Question**: {r['question']}\n\n")
+                if "error" in r:
+                    md.append(f"**Error**: {r['error']}\n\n")
+                md.append("**Validation Results**:\n")
+                for v in r.get("validation", []):
+                    md.append(f"- {v}\n")
+                md.append("\n")
+
+    return "".join(md)
 
 
 # Test fixtures
@@ -192,14 +794,35 @@ def configured_agent(shared_db, token_storage, configured_user_id):
     and creates an actual Agno agent using _get_or_create_agent().
 
     The agent is fully configured and ready to make real API calls.
-    Uses local system prompt file to avoid requiring Google Drive OAuth for the prompt.
+
+    Workbook Source Control:
+    - Default: Google Drive (requires OAuth + RELEASE_MANAGER_WORKBOOK_GDRIVE_URL)
+    - USE_LOCAL_SHEETS=true: Load from local CSV files in exports/release manager_sheets/
+
+    Set via environment variable or just command:
+    - USE_LOCAL_SHEETS=true pytest tests/...
+    - just rm-test 5 --local-sheets
     """
-    # Create the ReleaseManager wrapper with local system prompt file
+    # Check for USE_LOCAL_SHEETS environment variable
+    use_local_sheets = os.getenv("USE_LOCAL_SHEETS", "").lower() in ("true", "1", "yes")
+    local_sheets_dir = None
+
+    if use_local_sheets:
+        local_sheets_path = Path("exports/release manager_sheets")
+        if local_sheets_path.exists():
+            local_sheets_dir = str(local_sheets_path)
+            print(f"\n📊 Workbook Source: Local CSV sheets ({local_sheets_path})")
+        else:
+            print(f"\n⚠️  USE_LOCAL_SHEETS=true but directory not found: {local_sheets_path}")
+            print("   Falling back to Google Drive")
+    else:
+        print("\n📊 Workbook Source: Google Drive (requires OAuth)")
+
     agent_wrapper = ReleaseManager(
         shared_db=shared_db,
         token_storage=token_storage,
         user_id=configured_user_id,
-        system_prompt_local_file="docs/templates/release_manager_system_prompt.md",
+        local_sheets_dir=local_sheets_dir,
     )
 
     # Force creation of the underlying Agno agent
@@ -228,7 +851,7 @@ class TestReleaseManagerScenarios:
         [
             pytest.param(
                 s,
-                id=f"scenario_{s['id']:02d}_{s['category'].lower().replace(' ', '_').replace('-', '_')}",
+                id=f"L{s['level']}_{s['id']:02d}_{s['category'].lower().replace(' ', '_').replace('-', '_')}",
             )
             for s in TEST_SCENARIOS
         ],
@@ -248,6 +871,7 @@ class TestReleaseManagerScenarios:
         - Risk scenarios: pytest tests/test_release_manager_scenarios.py::TestReleaseManagerScenarios::test_scenario -k "risk" -v -m integration
         """
         scenario_id = scenario["id"]
+        level = scenario["level"]
         category = scenario["category"]
         question = scenario["question"]
         expected_keywords = scenario["expected_keywords"]
@@ -256,28 +880,41 @@ class TestReleaseManagerScenarios:
         description = scenario["description"]
 
         print(f"\n{'=' * 80}")
-        print(f"🧪 SCENARIO {scenario_id}: {category}")
+        print(f"🧪 LEVEL {level} - SCENARIO {scenario_id}: {category}")
         print(f"{'=' * 80}")
         print(f"Description: {description}")
         print(f"Question: {question}")
         print(f"{'-' * 80}\n")
 
+        # Add timing
+        import time
+
+        start_time = time.time()
+
         # Run the query using the configured user ID
         response = configured_agent.run(question, user_id=configured_user_id)
+
+        end_time = time.time()
+
         content = str(response.content) if hasattr(response, "content") else str(response)
 
-        # Validation
+        # Validation (collect all validation results before asserting)
         validation_messages = []
+        validation_failed = False
+        failure_message = None
 
-        # Check response length
-        assert len(content) >= 50, f"Response too short: {len(content)} chars"
+        # Log response length (no assertion - concise answers are good!)
         validation_messages.append(f"✅ Response length: {len(content)} chars")
 
         # Check for expected keywords
         content_lower = content.lower()
         found_keywords = [kw for kw in expected_keywords if kw.lower() in content_lower]
-        assert found_keywords, f"Missing expected keywords: {expected_keywords}"
-        validation_messages.append(f"✅ Found keywords: {found_keywords}")
+        if found_keywords:
+            validation_messages.append(f"✅ Found keywords: {found_keywords}")
+        else:
+            validation_messages.append(f"❌ Missing expected keywords: {expected_keywords}")
+            validation_failed = True
+            failure_message = f"Missing expected keywords: {expected_keywords}"
 
         # Check for source citations (for knowledge-based queries)
         if should_cite:
@@ -318,7 +955,62 @@ class TestReleaseManagerScenarios:
             else:
                 validation_messages.append("⚠️  No schedule context found")
 
-        # Count accuracy validation for scenario 7 (JQL count accuracy)
+        if knowledge_type == "workbook":
+            # Should include workbook/template/query references
+            has_workbook_context = any(keyword in content_lower for keyword in ["query", "template", "workflow", "available"])
+            if has_workbook_context:
+                validation_messages.append("✅ Includes workbook context")
+            else:
+                validation_messages.append("⚠️  No workbook context found")
+
+        # Level-specific validation (progressive strictness)
+        if level >= 2:
+            # Level 2+: Should cite multiple sources or show data combination
+            multi_source_indicators = sum(1 for indicator in ["jira", "query", "workbook", "template"] if indicator in content_lower)
+            if multi_source_indicators >= 2:
+                validation_messages.append(f"✅ Level {level}: Multi-source data combination detected")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected multi-source coordination")
+
+        if level >= 3:
+            # Level 3+: Should show structured workflow (multiple steps or template filling)
+            workflow_indicators = any(
+                indicator in content_lower
+                for indicator in [
+                    "step",
+                    "first",
+                    "next",
+                    "then",
+                    "placeholder",
+                    "fill",
+                    "announcement",
+                ]
+            )
+            if workflow_indicators:
+                validation_messages.append(f"✅ Level {level}: Workflow structure present")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected workflow structure")
+
+        if level >= 4:
+            # Level 4: Should show advanced reasoning (analysis, recommendations, prioritization)
+            reasoning_indicators = any(
+                indicator in content_lower
+                for indicator in [
+                    "recommend",
+                    "suggest",
+                    "priority",
+                    "risk",
+                    "analysis",
+                    "because",
+                    "therefore",
+                ]
+            )
+            if reasoning_indicators:
+                validation_messages.append(f"✅ Level {level}: Advanced reasoning present")
+            else:
+                validation_messages.append(f"⚠️  Level {level}: Expected advanced reasoning")
+
+        # Count accuracy validation for scenario 12 (JQL count accuracy)
         if scenario.get("validation_type") == "count_accuracy" and "jql_query" in scenario:
             jql_query = scenario["jql_query"]
             print("\n🔍 Count Accuracy Validation:")
@@ -374,9 +1066,10 @@ class TestReleaseManagerScenarios:
                                 break
 
                         if reported_count is None:
-                            validation_messages.append("⚠️  Could not extract count from agent response")
+                            validation_messages.append("❌ Could not extract count from agent response")
                             print("  Could not extract count from response")
-                            raise AssertionError("Failed to extract count from agent response for count accuracy validation")
+                            validation_failed = True
+                            failure_message = "Failed to extract count from agent response for count accuracy validation"
                         else:
                             print(f"  Agent reported count: {reported_count}")
 
@@ -391,7 +1084,8 @@ class TestReleaseManagerScenarios:
                                     f"  ❌ INACCURATE: Agent reported {reported_count} but actual is {actual_count} (off by {abs(reported_count - actual_count)})"
                                 )
                                 # This is a hard failure for count accuracy tests
-                                raise AssertionError(f"Count mismatch: agent reported {reported_count} but Jira has {actual_count}")
+                                validation_failed = True
+                                failure_message = f"Count mismatch: agent reported {reported_count} but Jira has {actual_count}"
 
             except Exception as e:
                 validation_messages.append(f"⚠️  Count validation error: {str(e)}")
@@ -406,9 +1100,43 @@ class TestReleaseManagerScenarios:
         print("\n📄 Response Preview:")
         preview = content[:500] + "..." if len(content) > 500 else content
         print(preview)
+
+        # Determine status before final assertion
+        status = (
+            "PASSED"
+            if all("✅" in msg for msg in validation_messages)
+            else "PARTIAL"
+            if any("✅" in msg for msg in validation_messages)
+            else "FAILED"
+        )
+
+        # Generate and save markdown log BEFORE asserting
+        markdown_content = generate_scenario_markdown(
+            scenario=scenario,
+            response=response,
+            validation_messages=validation_messages,
+            start_time=start_time,
+            end_time=end_time,
+            status=status,
+        )
+
+        log_path = save_scenario_log(scenario, markdown_content)
+        if log_path:
+            print(f"\n📝 Scenario log saved to: {log_path}")
+
+        # Now assert after logging is complete
         print(f"\n{'=' * 80}")
-        print("✅ SCENARIO PASSED")
+        if status == "PASSED":
+            print("✅ SCENARIO PASSED")
+        elif status == "PARTIAL":
+            print("⚠️  SCENARIO PARTIAL")
+        else:
+            print("❌ SCENARIO FAILED")
         print(f"{'=' * 80}\n")
+
+        # Raise assertion error if validation failed
+        if validation_failed:
+            raise AssertionError(failure_message)
 
     @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set")
     def test_comprehensive_scenarios(self, configured_agent, configured_user_id):
@@ -431,6 +1159,17 @@ class TestReleaseManagerScenarios:
         print(f"Total Scenarios: {total}")
         print(f"{'=' * 80}\n")
 
+        # Check if logging is enabled
+        logging_enabled = os.getenv("RELEASE_MANAGER_SCENARIO_LOGS", "").lower() in ("true", "1", "yes")
+
+        if logging_enabled:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = Path(f"tmp/scenario_logs/comprehensive_{timestamp}")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            print(f"📁 Logging enabled: {log_dir}\n")
+        else:
+            log_dir = None
+
         for scenario in TEST_SCENARIOS:
             scenario_id = scenario["id"]
             category = scenario["category"]
@@ -445,6 +1184,7 @@ class TestReleaseManagerScenarios:
 
             result = {
                 "id": scenario_id,
+                "level": scenario.get("level", 0),
                 "category": category,
                 "question": question,
                 "description": description,
@@ -455,8 +1195,16 @@ class TestReleaseManagerScenarios:
             }
 
             try:
+                # Add timing
+                import time
+
+                start_time = time.time()
+
                 # Run the query using the configured user ID
                 response = configured_agent.run(question, user_id=configured_user_id)
+
+                end_time = time.time()
+
                 content = str(response.content) if hasattr(response, "content") else str(response)
 
                 result["response_length"] = len(content)
@@ -523,11 +1271,41 @@ class TestReleaseManagerScenarios:
                 preview = content[:300] + "..." if len(content) > 300 else content
                 print(preview)
 
+                # Generate and save markdown log if enabled
+                if logging_enabled:
+                    markdown_content = generate_scenario_markdown(
+                        scenario=scenario,
+                        response=response,
+                        validation_messages=validation_results,
+                        start_time=start_time,
+                        end_time=end_time,
+                        status=result["status"],
+                    )
+
+                    # Save to comprehensive test directory
+                    level = scenario["level"]
+                    scenario_id = scenario["id"]
+                    category_slug = category.lower().replace(" ", "_").replace("-", "_")
+                    filename = f"L{level}_{scenario_id:02d}_{category_slug}.md"
+                    log_path = log_dir / filename
+                    log_path.write_text(markdown_content, encoding="utf-8")
+
             except Exception as e:
                 result["status"] = "FAILED"
                 result["error"] = str(e)
                 failed += 1
                 print(f"❌ Status: FAILED - {e}")
+
+                # Still log failures if enabled
+                if logging_enabled:
+                    # Create minimal error log
+                    error_md = f"# ❌ {category}\n\n**Status**: FAILED\n\n**Error**: {str(e)}\n\n**Question**: {question}\n"
+                    level = scenario.get("level", 0)
+                    scenario_id = scenario["id"]
+                    category_slug = category.lower().replace(" ", "_").replace("-", "_")
+                    filename = f"L{level}_{scenario_id:02d}_{category_slug}.md"
+                    log_path = log_dir / filename
+                    log_path.write_text(error_md, encoding="utf-8")
 
             results.append(result)
 
@@ -560,6 +1338,14 @@ class TestReleaseManagerScenarios:
             )
 
         print(f"\n📊 Detailed results saved to: {results_file}")
+
+        # Generate comprehensive summary if logging enabled
+        if logging_enabled:
+            summary_md = generate_comprehensive_summary(results, log_dir)
+            summary_path = log_dir / "comprehensive_summary.md"
+            summary_path.write_text(summary_md, encoding="utf-8")
+            print(f"📊 Comprehensive summary saved to: {summary_path}")
+
         print(f"{'=' * 80}\n")
 
         # Test passes if:

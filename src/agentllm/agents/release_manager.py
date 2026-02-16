@@ -23,8 +23,8 @@ class ReleaseManager(BaseAgentWrapper):
     Toolkit Configuration:
     ---------------------
     - Google Drive: OAuth-based access to Google Docs, Sheets, and Presentations (required)
-    - JIRA: API token-based access to JIRA issues (optional)
-    - SystemPromptExtension: Extended instructions from Google Drive document (required if configured)
+    - JIRA: API token-based access to JIRA issues (required)
+    - ReleaseManagerToolkit: Query methods for Excel workbook sheets (Jira queries, Slack templates, workflows) (required)
 
     The agent helps with:
     - Managing Y-stream releases (major versions like 1.7.0, 1.8.0)
@@ -33,6 +33,7 @@ class ReleaseManager(BaseAgentWrapper):
     - Coordinating with Engineering, QE, Documentation, and Product Management teams
     - Providing release status updates for meetings
     - Monitoring Jira for release-related issues, features, and bugs
+    - Generating Slack freeze announcements from templates
     """
 
     def __init__(
@@ -43,7 +44,6 @@ class ReleaseManager(BaseAgentWrapper):
         session_id: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
-        system_prompt_local_file: str | None = None,
         **model_kwargs,
     ):
         """Initialize the Release Manager with configurator pattern.
@@ -55,15 +55,10 @@ class ReleaseManager(BaseAgentWrapper):
             session_id: Session identifier (optional)
             temperature: Model temperature (0.0-2.0)
             max_tokens: Maximum tokens in response
-            system_prompt_local_file: Optional local file path for system prompt.
-                                      If provided, reads from file instead of Google Drive.
-                                      Useful for testing without OAuth.
             **model_kwargs: Additional model parameters
         """
         # Store token_storage for configurator
         self._token_storage = token_storage
-        # Store local file path for system prompt extension
-        self._system_prompt_local_file = system_prompt_local_file
 
         # Call parent constructor (will call _create_configurator)
         super().__init__(
@@ -80,6 +75,7 @@ class ReleaseManager(BaseAgentWrapper):
         user_id: str,
         session_id: str | None,
         shared_db: SqliteDb,
+        local_sheets_dir: str | None = None,
         **kwargs: Any,
     ) -> ReleaseManagerConfigurator:
         """Create Release Manager configurator instance.
@@ -88,6 +84,7 @@ class ReleaseManager(BaseAgentWrapper):
             user_id: User identifier
             session_id: Session identifier
             shared_db: Shared database
+            local_sheets_dir: Optional local directory with CSV sheets (for testing without OAuth)
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
         Returns:
@@ -98,7 +95,7 @@ class ReleaseManager(BaseAgentWrapper):
             session_id=session_id,
             shared_db=shared_db,
             token_storage=self._token_storage,
-            system_prompt_local_file=self._system_prompt_local_file,
+            local_sheets_dir=local_sheets_dir,
             **kwargs,
         )
 

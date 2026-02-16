@@ -76,7 +76,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
         """
         # Local config file mode (automation) - no token storage needed
         if self._local_config_file and os.path.exists(self._local_config_file):
-            logger.debug(f"JiraTriagerToolkitConfig: is_configured=True (local file mode)")
+            logger.debug("JiraTriagerToolkitConfig: is_configured=True (local file mode)")
             return True
 
         # Google Drive mode (interactive) - requires token storage

@@ -34,6 +34,7 @@ class JiraTriagerTools(Toolkit):
         self,
         jira_token: str,
         jira_url: str,
+        team_assignee_map: dict[str, list[str]] | None = None,
     ):
         """
         Initialize the Jira Triager toolkit.
@@ -41,11 +42,13 @@ class JiraTriagerTools(Toolkit):
         Args:
             jira_token: Jira API token for authentication
             jira_url: Jira server URL
+            team_assignee_map: Map of team names to member names (for assignee lookup)
         """
         super().__init__(name="jira_triager_tools")
 
         self.jira_token = jira_token
         self.jira_url = jira_url
+        self.team_assignee_map = team_assignee_map or {}
 
         # Jira client (lazy loaded)
         self._jira_client: JIRA | None = None
@@ -128,6 +131,9 @@ class JiraTriagerTools(Toolkit):
                 "current_team": "...",
                 "current_components": [...],
                 "current_assignee": "...",
+                "assignee_team": "...",
+                "missing_fields": [...],
+                "allowed_components": [...],
                 "title": "...",
                 "description": "..."
             }
@@ -190,6 +196,16 @@ class JiraTriagerTools(Toolkit):
             if not current_components:
                 missing_fields.append("components")
 
+            # CRITICAL: Only look up assignee team if current_team is empty
+            # If team is already set, don't provide assignee_team to avoid confusing the AI
+            assignee_team = None
+            if not current_team and current_assignee and self.team_assignee_map:
+                for team_name, members in self.team_assignee_map.items():
+                    if current_assignee in members:
+                        assignee_team = team_name
+                        logger.info(f"{issue_key}: Assignee '{current_assignee}' belongs to team '{team_name}' (deterministic)")
+                        break
+
             if not missing_fields:
                 return json.dumps(
                     {
@@ -208,6 +224,7 @@ class JiraTriagerTools(Toolkit):
                 "current_team": current_team,
                 "current_components": current_components,
                 "current_assignee": current_assignee,
+                "assignee_team": assignee_team,  # Deterministic team from assignee lookup
                 "missing_fields": missing_fields,
                 "allowed_components": allowed_components,
             }

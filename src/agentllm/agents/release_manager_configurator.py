@@ -244,17 +244,28 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         """Get Release Manager toolkit if configured.
 
         Returns:
-            ReleaseManagerToolkit instance or None if not configured.
+            ReleaseManagerToolkit instance or None if ReleaseManagerToolkitConfig
+            is not found in toolkit_configs.
 
         Raises:
-            RuntimeError: If workbook loading fails (propagated from toolkit config).
+            RuntimeError: If infrastructure is missing (service account, workbook URL)
+                or if workbook loading fails (propagated from toolkit config).
         """
         # Find ReleaseManagerToolkitConfig in toolkit_configs
         for config in self.toolkit_configs:
             if isinstance(config, ReleaseManagerToolkitConfig):
                 if config.is_configured(self.user_id):
                     return config.get_toolkit(self.user_id)
-                break
+                # Not configured — diagnose and raise so the warning path fires
+                reasons = []
+                if not config._workbook_url:
+                    reasons.append("RELEASE_MANAGER_WORKBOOK_GDRIVE_URL is not set")
+                if not config._gdrive_config.is_configured(self.user_id):
+                    reasons.append("Google Drive service account is not configured")
+                raise RuntimeError(
+                    "Release Manager workbook infrastructure is not available: "
+                    + "; ".join(reasons)
+                )
 
         return None
 

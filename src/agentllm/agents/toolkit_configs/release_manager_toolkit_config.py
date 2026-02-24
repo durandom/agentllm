@@ -90,14 +90,13 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
         return None
 
     def get_config_prompt(self, user_id: str) -> str | None:
-        """Get configuration prompt if required config keys are missing.
+        """Get configuration prompt for missing infrastructure or config keys.
 
         Args:
             user_id: User identifier.
 
         Returns:
-            Configuration prompt if workbook is accessible but missing required keys,
-            None otherwise (e.g., if GDrive not configured yet).
+            Configuration prompt describing what's missing, or None if fully configured.
         """
         # Check if workbook is accessible (but not necessarily configured)
         workbook_accessible = False
@@ -107,7 +106,22 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
             workbook_accessible = True
 
         if not workbook_accessible:
-            return None  # GDrive config will handle prompting
+            # Diagnose why infrastructure is missing
+            reasons = []
+            if not self._workbook_url:
+                reasons.append("`RELEASE_MANAGER_WORKBOOK_GDRIVE_URL` is not set")
+            if not self._gdrive_config.is_configured(user_id):
+                reasons.append(
+                    "Google Drive service account is not configured "
+                    "(set `GDRIVE_SERVICE_ACCOUNT_PATH` or `GDRIVE_SERVICE_ACCOUNT_JSON`)"
+                )
+            reason_text = "\n".join(f"- {r}" for r in reasons) if reasons else "- Unknown"
+            return (
+                f"⚠️ **Release Manager workbook is not available**\n\n"
+                f"Server configuration issues:\n{reason_text}\n\n"
+                f"Please contact your administrator to complete setup.\n"
+                f"See `docs/google_service_account_setup.md` for details."
+            )
 
         # Check for missing required config keys
         missing_keys = self._get_missing_config_keys(user_id)

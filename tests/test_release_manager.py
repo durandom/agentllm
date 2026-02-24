@@ -76,13 +76,14 @@ class TestReleaseManagerBasics:
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
         configs = _get_toolkit_configs(agent)
         assert isinstance(configs, list)
-        # Should have JiraConfig and ReleaseManagerToolkitConfig
-        assert len(configs) == 2
+        # Should have GDriveServiceAccountConfig, JiraConfig, and ReleaseManagerToolkitConfig
+        assert len(configs) == 3
 
     def test_toolkit_config_types(self, shared_db, token_storage):
         """Test that toolkit configs have the expected types."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
         config_types = [type(c).__name__ for c in _get_toolkit_configs(agent)]
+        assert "GDriveServiceAccountConfig" in config_types
         assert "JiraConfig" in config_types
         assert "ReleaseManagerToolkitConfig" in config_types
 

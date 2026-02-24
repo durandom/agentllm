@@ -137,9 +137,8 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             default_base_jql=default_base_jql,
         )
 
-        # Note: gdrive_sa_config is NOT in the returned list — it's only used
-        # internally by ReleaseManagerToolkitConfig for workbook download
         return [
+            gdrive_sa_config,
             jira_config,
             rm_toolkit_config,
         ]

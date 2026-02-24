@@ -6,7 +6,7 @@ and verifies that toolkit configuration is properly checked before agent initial
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from agno.db.sqlite import SqliteDb
@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from agentllm.agents.release_manager import ReleaseManager
 from agentllm.agents.toolkit_configs import JiraConfig
+from agentllm.agents.toolkit_configs.release_manager_toolkit_config import ReleaseManagerToolkitConfig
 from agentllm.db import TokenStorage
 
 # Load .env file for tests
@@ -43,6 +44,11 @@ def token_storage(shared_db: SqliteDb) -> TokenStorage:
     return TokenStorage(agno_db=shared_db)
 
 
+def _get_toolkit_configs(agent):
+    """Helper to access toolkit_configs via the configurator."""
+    return agent._configurator.toolkit_configs
+
+
 class TestReleaseManagerBasics:
     """Basic tests for ReleaseManager instantiation and parameters."""
 
@@ -50,7 +56,7 @@ class TestReleaseManagerBasics:
         """Test that ReleaseManager can be instantiated."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
         assert agent is not None
-        assert len(agent.toolkit_configs) > 0
+        assert len(_get_toolkit_configs(agent)) > 0
 
     def test_create_agent_with_params(self, shared_db, token_storage):
         """Test that ReleaseManager accepts model parameters."""
@@ -62,16 +68,23 @@ class TestReleaseManagerBasics:
             max_tokens=100,
         )
         assert agent is not None
-        assert agent._temperature == 0.5
-        assert agent._max_tokens == 100
+        assert agent._configurator._temperature == 0.5
+        assert agent._configurator._max_tokens == 100
 
     def test_toolkit_configs_initialized(self, shared_db, token_storage):
         """Test that toolkit configs are properly initialized."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-        assert hasattr(agent, "toolkit_configs")
-        assert isinstance(agent.toolkit_configs, list)
-        # Should have at least GoogleDriveConfig
-        assert len(agent.toolkit_configs) >= 1
+        configs = _get_toolkit_configs(agent)
+        assert isinstance(configs, list)
+        # Should have JiraConfig and ReleaseManagerToolkitConfig
+        assert len(configs) == 2
+
+    def test_toolkit_config_types(self, shared_db, token_storage):
+        """Test that toolkit configs have the expected types."""
+        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
+        config_types = [type(c).__name__ for c in _get_toolkit_configs(agent)]
+        assert "JiraConfig" in config_types
+        assert "ReleaseManagerToolkitConfig" in config_types
 
 
 class TestToolkitConfiguration:
@@ -79,341 +92,120 @@ class TestToolkitConfiguration:
 
     def test_required_toolkit_prompts_immediately(self, shared_db, token_storage):
         """Test that required toolkits prompt for config before agent can be used."""
-        # Create agent with a required toolkit
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
+        configs = _get_toolkit_configs(agent)
 
-        # Mock GoogleDrive as configured so we can test Jira prompting
-        with patch.object(agent.toolkit_configs[0], "is_configured", return_value=True):
-            # Mock ReleaseManagerToolkitConfig as configured (it depends on GDrive)
-            with patch.object(agent.toolkit_configs[2], "is_configured", return_value=True):
-                # Add a required toolkit config (mock JiraConfig as required)
-                with patch.object(JiraConfig, "is_required", return_value=True):
-                    with patch.object(JiraConfig, "is_configured", return_value=False):
-                        with patch.object(JiraConfig, "get_config_prompt", return_value="Please configure JIRA"):
-                            # Add the mocked required config
-                            agent.toolkit_configs.append(JiraConfig())
+        # Mock ReleaseManagerToolkitConfig as configured
+        rm_config = next(c for c in configs if isinstance(c, ReleaseManagerToolkitConfig))
+        with patch.object(rm_config, "is_configured", return_value=True):
+            # Add a required toolkit config (mock JiraConfig as required)
+            with patch.object(JiraConfig, "is_required", return_value=True):
+                with patch.object(JiraConfig, "is_configured", return_value=False):
+                    with patch.object(JiraConfig, "get_config_prompt", return_value="Please configure JIRA"):
+                        # Add the mocked required config
+                        configs.append(JiraConfig())
 
-                            # User tries to send a message without configuring
-                            response = agent.run("Hello!", user_id="new-user")
+                        # User tries to send a message without configuring
+                        response = agent.run("Hello!", user_id="new-user")
 
-                            # Should get config prompt, not agent response
-                            content = str(response.content) if hasattr(response, "content") else str(response)
-                            assert "configure" in content.lower() or "jira" in content.lower()
-
-    def test_google_drive_is_required(self, shared_db, token_storage):
-        """Test that Google Drive is required (like all toolkits)."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # Should have GoogleDriveConfig, JiraConfig, and ReleaseManagerToolkitConfig
-        assert len(agent.toolkit_configs) == 3
-        gdrive_config = agent.toolkit_configs[0]
-        assert gdrive_config.is_required(), "GoogleDriveConfig should be required"
-
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_google_drive_config_extracted_from_url(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that Google Drive auth code is extracted from full redirect URL."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # Mock Google Drive toolkit creation and validation
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                # Mock OAuth flow
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
-
-                # Mock Google Drive API user info
-                mock_service = MagicMock()
-                mock_user_info = {"user": {"displayName": "Test User", "emailAddress": "test@example.com"}}
-                mock_service.about().get().execute.return_value = mock_user_info
-                mock_build.return_value = mock_service
-
-                # Test URL formats
-                test_urls = [
-                    "http://localhost?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                    "http://localhost/?code=4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                    "4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                ]
-
-                for url in test_urls:
-                    # Provide Google Drive auth code/URL
-                    response = agent.run(url, user_id="test-user")
-
-                    # Should get confirmation
-                    content = str(response.content) if hasattr(response, "content") else str(response)
-                    assert "google drive" in content.lower() or "authorized" in content.lower(), f"Failed to extract code from: {url}"
-
-                    # Reset for next test
-                    gdrive_config = agent.toolkit_configs[0]
-                    if "test-user" in gdrive_config._user_configs:
-                        del gdrive_config._user_configs["test-user"]
+                        # Should get config prompt, not agent response
+                        content = str(response.content) if hasattr(response, "content") else str(response)
+                        assert "configure" in content.lower() or "jira" in content.lower()
 
     def test_toolkit_config_is_configured_check(self, shared_db, token_storage):
         """Test that toolkit configs properly check if they're configured."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
         # All toolkits should report not configured for new user
-        for config in agent.toolkit_configs:
+        for config in _get_toolkit_configs(agent):
             assert not config.is_configured("brand-new-user"), (
                 f"{config.__class__.__name__}.is_configured() should return False for new user"
             )
-
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_toolkit_becomes_configured_after_auth(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that toolkit reports configured after successful authorization."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-        gdrive_config = agent.toolkit_configs[0]  # GoogleDriveConfig
-
-        # Initially not configured
-        assert not gdrive_config.is_configured("test-user")
-
-        # Mock Google Drive OAuth flow
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                # Mock token storage to avoid JSON serialization issues with MagicMock
-                with patch.object(gdrive_config.token_storage, "upsert_gdrive_token"):
-                    with patch.object(
-                        gdrive_config.token_storage,
-                        "get_gdrive_credentials",
-                        return_value=mock_creds,
-                    ):
-                        mock_flow_instance = MagicMock()
-                        mock_flow_instance.credentials = mock_creds
-                        mock_flow.from_client_config.return_value = mock_flow_instance
-
-                        mock_service = MagicMock()
-                        mock_service.about().get().execute.return_value = {
-                            "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                        }
-                        mock_build.return_value = mock_service
-
-                        # Authorize
-                        agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
-
-                        # Now should be configured
-                        assert gdrive_config.is_configured("test-user")
-
-    def test_google_drive_prompts_auth_immediately(self, shared_db, token_storage):
-        """Test that Google Drive prompts authorization immediately (required toolkit)."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # Mock OAuth URL generation
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            mock_flow_instance = MagicMock()
-            mock_flow_instance.authorization_url.return_value = ("http://oauth.url", "state")
-            mock_flow.from_client_config.return_value = mock_flow_instance
-
-            # Any message should prompt for Google Drive auth (it's required)
-            response = agent.run("Hello!", user_id="test-user")
-
-            # Should get OAuth prompt
-            content = str(response.content) if hasattr(response, "content") else str(response)
-            assert "authorize" in content.lower() or "google drive" in content.lower()
 
 
 class TestAgentExecution:
     """Tests for agent execution with configured toolkits."""
 
-    @pytest.fixture
-    def configured_agent(self, shared_db, token_storage):
-        """Fixture that provides a ReleaseManager with Google Drive configured."""
+    @pytest.mark.skipif(
+        "GOOGLE_API_KEY" not in os.environ,
+        reason="GOOGLE_API_KEY not set",
+    )
+    def test_sync_run(self, shared_db, token_storage):
+        """Test synchronous run() method with all toolkits mocked as configured."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
+        configs = _get_toolkit_configs(agent)
 
-        # Mock and configure Google Drive (required toolkit)
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_creds = MagicMock()
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
-
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
-                mock_build.return_value = mock_service
-
-                # Configure Google Drive
-                agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
-
-        return agent
-
-    @pytest.mark.skipif(
-        "GOOGLE_API_KEY" not in os.environ,
-        reason="GOOGLE_API_KEY not set",
-    )
-    def test_sync_run(self, configured_agent):
-        """Test synchronous run() method."""
-        response = configured_agent.run("Hello! Can you help me?", user_id="test-user")
-
-        assert response is not None
-        assert hasattr(response, "content")
-        assert len(str(response.content)) > 0
-
-    @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        "GOOGLE_API_KEY" not in os.environ,
-        reason="GOOGLE_API_KEY not set",
-    )
-    async def test_async_non_streaming(self, configured_agent):
-        """Test async arun() without streaming."""
-        response = await configured_agent.arun("Hello! Can you help me?", user_id="test-user", stream=False)
-
-        assert response is not None
-        assert hasattr(response, "content")
-        assert len(str(response.content)) > 0
-
-    @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        "GOOGLE_API_KEY" not in os.environ,
-        reason="GOOGLE_API_KEY not set",
-    )
-    async def test_async_streaming(self, configured_agent):
-        """Test async arun() WITH streaming."""
-        # Call arun with streaming enabled
-        result = configured_agent.arun("Hello! Can you help me?", user_id="test-user", stream=True)
-
-        # Verify it's an async generator
-        assert hasattr(result, "__aiter__"), "Result should be an async generator"
-
-        # Iterate and collect chunks
-        chunks = []
-        async for chunk in result:
-            chunks.append(chunk)
-
-        # Verify we got chunks
-        assert len(chunks) > 0, "Should receive at least one chunk"
+        # Mock all toolkit configs as configured
+        patches = [patch.object(c, "is_configured", return_value=True) for c in configs]
+        for p in patches:
+            p.start()
+        try:
+            response = agent.run("Hello! Can you help me?", user_id="test-user")
+            assert response is not None
+            assert hasattr(response, "content")
+            assert len(str(response.content)) > 0
+        finally:
+            for p in patches:
+                p.stop()
 
 
 class TestAgentCaching:
     """Tests for agent caching and invalidation."""
 
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_agent_cache_per_user(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that agents are cached per user."""
+    def test_agent_is_cached(self, shared_db, token_storage):
+        """Test that agent is cached after first creation."""
         manager = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
-        # Configure Google Drive for both users
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_creds = MagicMock()
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
-
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
-                mock_build.return_value = mock_service
-
-                # Configure for both users
-                manager.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="user1")
-                manager.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="user2")
-
-        # Create agents for different users
-        agent1 = manager._get_or_create_agent("user1")
-        agent2 = manager._get_or_create_agent("user2")
-
-        # Both should create underlying agents
+        # Create agent
+        agent1 = manager._get_or_create_agent()
         assert agent1 is not None
-        assert agent2 is not None
 
-        # Calling again on same user should return cached agent
-        agent1_again = manager._get_or_create_agent("user1")
+        # Calling again should return cached agent
+        agent1_again = manager._get_or_create_agent()
         assert agent1_again is agent1, "Should return cached agent"
-
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_agent_invalidated_after_new_toolkit_config(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that agent is invalidated when new toolkit is configured."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # Create agent for user (no toolkits configured)
-        original_agent = agent._get_or_create_agent("test-user")
-        assert original_agent is not None
-
-        # Mock Google Drive OAuth to configure a toolkit
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
-
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
-                mock_build.return_value = mock_service
-
-                # Configure Google Drive
-                agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
-
-        # Agent should have been invalidated (set to None)
-        assert agent._agent is None, "Agent should be invalidated after toolkit configuration"
-
-        # Creating agent again should give new instance with tools
-        new_agent = agent._get_or_create_agent("test-user")
-        assert new_agent is not None
-        # Verify a new agent was created
-        assert agent._agent is not None, "New agent should be cached after creation"
 
 
 class TestConfigurationValidation:
     """Tests for configuration validation and error handling."""
 
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_invalid_auth_code_returns_error(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that invalid authorization code returns user-friendly error."""
+    def test_workbook_error_surfaces_in_instructions(self, shared_db, token_storage):
+        """Test that workbook loading failures are surfaced in agent instructions.
+
+        Simulates: service account is configured (is_configured=True) but the
+        actual workbook download fails (get_toolkit raises RuntimeError).
+        This is realistic — e.g., wrong URL, network error, unshared document.
+        """
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
+        configs = _get_toolkit_configs(agent)
 
-        # Mock failed OAuth exchange
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            mock_flow_instance = MagicMock()
-            mock_flow_instance.fetch_token.side_effect = Exception("Invalid code")
-            mock_flow.from_client_config.return_value = mock_flow_instance
+        # Find the ReleaseManagerToolkitConfig
+        rm_config = next(c for c in configs if isinstance(c, ReleaseManagerToolkitConfig))
 
-            # Provide invalid code
-            response = agent.run("4/invalid_code", user_id="test-user")
+        # Simulate: service account credentials are present (infrastructure OK)
+        # but workbook download fails (network error, wrong URL, etc.)
+        # is_configured() now only checks infrastructure, so this is realistic.
+        with patch.object(rm_config._gdrive_config, "is_configured", return_value=True):
+            with patch.object(rm_config, "get_toolkit", side_effect=RuntimeError("Workbook download failed")):
+                # Need workbook URL set for is_configured() to return True
+                rm_config._workbook_url = "https://docs.google.com/spreadsheets/d/fake-id/edit"
 
-            # Should get error message, not crash
-            content = str(response.content) if hasattr(response, "content") else str(response)
-            assert "failed" in content.lower() or "invalid" in content.lower()
+                # Build instructions should include the warning
+                instructions = agent._configurator._build_agent_instructions()
+                instructions_text = "\n".join(instructions)
+                assert "WARNING" in instructions_text
+                assert "Workbook download failed" in instructions_text
+                assert "without workbook configuration" in instructions_text
 
 
 class TestToolkitInstructions:
     """Tests for toolkit-specific agent instructions."""
-
-    @patch("agentllm.tools.gdrive_toolkit.GoogleDriveTools")
-    def test_agent_instructions_include_toolkit_info(self, mock_gdrive_tools, shared_db, token_storage):
-        """Test that agent receives toolkit-specific instructions when configured."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # Mock Google Drive OAuth
-        mock_creds = MagicMock()
-        with patch("agentllm.agents.toolkit_configs.gdrive_config.Flow") as mock_flow:
-            with patch("agentllm.agents.toolkit_configs.gdrive_config.build") as mock_build:
-                mock_flow_instance = MagicMock()
-                mock_flow_instance.credentials = mock_creds
-                mock_flow.from_client_config.return_value = mock_flow_instance
-
-                mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
-                mock_build.return_value = mock_service
-
-                # Configure Google Drive
-                agent.run("4/0AeaYSHBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", user_id="test-user")
-
-        # Get toolkit instructions
-        gdrive_config = agent.toolkit_configs[0]
-        instructions = gdrive_config.get_agent_instructions("test-user")
-
-        # Should have Google Drive-specific instructions
-        assert len(instructions) > 0
-        assert any("google drive" in inst.lower() for inst in instructions)
 
     def test_agent_instructions_empty_when_not_configured(self, shared_db, token_storage):
         """Test that toolkits don't add instructions when not configured."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
         # Get instructions for unconfigured user
-        for config in agent.toolkit_configs:
+        for config in _get_toolkit_configs(agent):
             instructions = config.get_agent_instructions("unconfigured-user")
             # Should be empty since not configured
             assert len(instructions) == 0
@@ -422,49 +214,40 @@ class TestToolkitInstructions:
 class TestRequiredVsOptionalConfigs:
     """Tests for required toolkit configuration behavior."""
 
-    def test_all_toolkits_are_required_by_default(self, shared_db, token_storage):
-        """Test that all toolkits are required by default."""
-        agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
-
-        # All toolkits should be required
-        for config in agent.toolkit_configs:
-            assert config.is_required(), f"{config.__class__.__name__} should be required by default"
-
     def test_jira_config_is_required(self, shared_db, token_storage):
         """Test that JiraConfig is required (inherits from base)."""
         jira_config = JiraConfig(token_storage=token_storage)
         assert jira_config.is_required(), "JiraConfig should be required by default"
 
-    def test_google_drive_is_required(self, shared_db, token_storage):
-        """Test that GoogleDriveConfig is required."""
+    def test_rm_toolkit_config_is_required(self, shared_db, token_storage):
+        """Test that ReleaseManagerToolkitConfig is required."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
 
-        # Should have GoogleDriveConfig, JiraConfig, and ReleaseManagerToolkitConfig
-        assert len(agent.toolkit_configs) == 3
-        gdrive_config = agent.toolkit_configs[0]
-        assert gdrive_config.is_required(), "GoogleDriveConfig should be required"
+        rm_config = next(c for c in _get_toolkit_configs(agent) if isinstance(c, ReleaseManagerToolkitConfig))
+        assert rm_config.is_required(), "ReleaseManagerToolkitConfig should be required"
 
     @patch("agentllm.tools.jira_toolkit.JiraTools")
     def test_required_config_blocks_agent_until_configured(self, mock_jira_tools, shared_db, token_storage):
         """Test that required configs prevent agent usage until configured."""
         agent = ReleaseManager(shared_db=shared_db, token_storage=token_storage, user_id="test-user")
+        configs = _get_toolkit_configs(agent)
 
-        # Mock GoogleDrive and ReleaseManagerToolkit as configured so we can test Jira
-        with patch.object(agent.toolkit_configs[0], "is_configured", return_value=True):
-            with patch.object(agent.toolkit_configs[2], "is_configured", return_value=True):
-                # Add a required config (JiraConfig is required by default)
-                jira_config = JiraConfig(token_storage=token_storage)
-                agent.toolkit_configs.append(jira_config)
+        # Mock ReleaseManagerToolkitConfig as configured
+        rm_config = next(c for c in configs if isinstance(c, ReleaseManagerToolkitConfig))
+        with patch.object(rm_config, "is_configured", return_value=True):
+            # Add a required config (JiraConfig is required by default)
+            jira_config = JiraConfig(token_storage=token_storage)
+            configs.append(jira_config)
 
-                # Mock the prompt
-                mock_jira_tools.return_value.validate_connection.return_value = (True, "Connected")
+            # Mock the prompt
+            mock_jira_tools.return_value.validate_connection.return_value = (True, "Connected")
 
-                # Try to use agent without configuring Jira
-                response = agent.run("Hello!", user_id="new-user")
+            # Try to use agent without configuring Jira
+            response = agent.run("Hello!", user_id="new-user")
 
-                # Should get JIRA config prompt, not agent response
-                content = str(response.content) if hasattr(response, "content") else str(response)
-                assert "jira" in content.lower() or "token" in content.lower()
+            # Should get JIRA config prompt, not agent response
+            content = str(response.content) if hasattr(response, "content") else str(response)
+            assert "jira" in content.lower() or "token" in content.lower()
 
 
 # TestExtendedSystemPrompt tests removed - functionality moved to SystemPromptExtensionConfig

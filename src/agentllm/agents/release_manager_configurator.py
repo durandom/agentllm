@@ -4,8 +4,10 @@ from typing import Any
 
 from agno.db.sqlite import SqliteDb
 
+from loguru import logger
+
 from agentllm.agents.base import AgentConfigurator, BaseToolkitConfig
-from agentllm.agents.toolkit_configs import GoogleDriveConfig
+from agentllm.agents.toolkit_configs.gdrive_service_account_config import GDriveServiceAccountConfig
 from agentllm.agents.toolkit_configs.jira_config import JiraConfig
 from agentllm.agents.toolkit_configs.release_manager_toolkit_config import (
     ReleaseManagerToolkitConfig,
@@ -96,8 +98,6 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         # Allow override via environment variable
         model = os.getenv("RELEASE_MANAGER_MODEL")
         if model:
-            from loguru import logger
-
             logger.info(f"Using model from RELEASE_MANAGER_MODEL env var: {model}")
             return model
 
@@ -110,13 +110,13 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         Returns:
             list[BaseToolkitConfig]: List of toolkit configs
         """
-        # ORDER MATTERS: ReleaseManagerToolkitConfig depends on GoogleDriveConfig
-        gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+        # Service account for workbook access (no per-user OAuth needed)
+        gdrive_sa_config = GDriveServiceAccountConfig(token_storage=self._token_storage)
 
-        # Release Manager workbook (depends on GoogleDrive for OAuth, unless using local sheets)
+        # Release Manager workbook (uses service account, unless using local sheets)
         # We need to create this BEFORE JiraConfig so we can read jira_default_base_jql from the workbook
         rm_toolkit_config = ReleaseManagerToolkitConfig(
-            gdrive_config=gdrive_config,
+            gdrive_config=gdrive_sa_config,
             local_sheets_dir=self._local_sheets_dir,
         )
 
@@ -137,10 +137,11 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             default_base_jql=default_base_jql,
         )
 
+        # Note: gdrive_sa_config is NOT in the returned list — it's only used
+        # internally by ReleaseManagerToolkitConfig for workbook download
         return [
-            gdrive_config,
             jira_config,
-            rm_toolkit_config,  # Must come after gdrive_config due to dependency
+            rm_toolkit_config,
         ]
 
     def _build_agent_instructions(self) -> list[str]:
@@ -179,8 +180,27 @@ class ReleaseManagerConfigurator(AgentConfigurator):
             "- Follow established release processes and policies",
         ]
 
-        # 2. Append workbook system_prompt
-        rm_toolkit = self._get_rm_toolkit()
+        # 2. Attempt to load workbook toolkit (may fail)
+        rm_toolkit = None
+        workbook_error = None
+        try:
+            rm_toolkit = self._get_rm_toolkit()
+        except RuntimeError as e:
+            workbook_error = str(e)
+            logger.error(f"Failed to load Release Manager workbook: {e}")
+
+        # 2a. Surface workbook loading failure as agent warning
+        if workbook_error:
+            core_instructions.append("")
+            core_instructions.append(
+                f"## ⚠️ WARNING: Release Manager workbook could not be loaded\n\n"
+                f"Error: {workbook_error}\n\n"
+                f"You are operating without workbook configuration. "
+                f"Workflows, queries, and templates are unavailable.\n"
+                f"Please inform the user about this limitation."
+            )
+
+        # 2b. Append workbook system_prompt
         if rm_toolkit:
             try:
                 system_prompt = rm_toolkit.get_system_prompt()
@@ -188,9 +208,6 @@ class ReleaseManagerConfigurator(AgentConfigurator):
                 core_instructions.append("## Additional Guidance from Workbook")
                 core_instructions.append(system_prompt)
             except ValueError as e:
-                # Log warning but continue (workbook optional for now)
-                from loguru import logger
-
                 logger.warning(f"Could not load system prompt from workbook: {e}")
 
         # 2.5 Inject configuration values from workbook
@@ -228,19 +245,16 @@ class ReleaseManagerConfigurator(AgentConfigurator):
 
         Returns:
             ReleaseManagerToolkit instance or None if not configured.
-        """
-        try:
-            # Find ReleaseManagerToolkitConfig in toolkit_configs
-            for config in self.toolkit_configs:
-                if isinstance(config, ReleaseManagerToolkitConfig):
-                    if config.is_configured(self.user_id):
-                        return config.get_toolkit(self.user_id)
-                    break
-        except Exception as e:
-            # Log but don't fail - just skip enhanced instructions
-            from loguru import logger
 
-            logger.warning(f"Could not load Release Manager toolkit: {e}")
+        Raises:
+            RuntimeError: If workbook loading fails (propagated from toolkit config).
+        """
+        # Find ReleaseManagerToolkitConfig in toolkit_configs
+        for config in self.toolkit_configs:
+            if isinstance(config, ReleaseManagerToolkitConfig):
+                if config.is_configured(self.user_id):
+                    return config.get_toolkit(self.user_id)
+                break
 
         return None
 

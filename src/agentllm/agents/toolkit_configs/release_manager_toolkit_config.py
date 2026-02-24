@@ -13,7 +13,7 @@ from pathlib import Path
 from loguru import logger
 
 from agentllm.agents.base import BaseToolkitConfig
-from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveConfig
+from agentllm.agents.toolkit_configs.gdrive_service_account_config import GDriveServiceAccountConfig
 from agentllm.tools.release_manager_toolkit import ReleaseManagerToolkit
 
 # Required sheets in the workbook
@@ -37,20 +37,21 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
     """Configuration for Release Manager toolkit.
 
     Manages downloading the Excel workbook from Google Drive and parsing
-    it into in-memory sheet data. Depends on GoogleDriveConfig for OAuth.
+    it into in-memory sheet data. Uses a Google Cloud service account for
+    authentication (no per-user OAuth required).
 
     Note: This toolkit does not require user configuration - it automatically
-    downloads the workbook when GoogleDrive is configured.
+    downloads the workbook when the service account is configured.
     """
 
-    def __init__(self, gdrive_config: GoogleDriveConfig, local_sheets_dir: str | None = None, **kwargs):
+    def __init__(self, gdrive_config: GDriveServiceAccountConfig, local_sheets_dir: str | None = None, **kwargs):
         """Initialize Release Manager toolkit config.
 
         Args:
-            gdrive_config: GoogleDrive config instance for OAuth credentials.
+            gdrive_config: GDrive service account config instance for authentication.
             local_sheets_dir: Local directory path containing CSV sheets.
                              If provided, takes precedence over Google Drive.
-                             Useful for testing without OAuth.
+                             Useful for testing without service account credentials.
             **kwargs: Additional arguments passed to parent BaseToolkitConfig.
 
         """
@@ -141,29 +142,21 @@ class ReleaseManagerToolkitConfig(BaseToolkitConfig):
     def is_configured(self, user_id: str) -> bool:
         """Check if Release Manager toolkit is configured for user.
 
-        Returns True if:
-        - Workbook is accessible (local or via GDrive), AND
-        - All required configuration keys are present in Configuration & Setup sheet
+        Returns True if the workbook is accessible (local or via GDrive).
+        Does NOT download the workbook — that happens lazily in get_toolkit().
+        This avoids masking download errors as "not configured".
 
         Args:
             user_id: User identifier.
 
         Returns:
-            True if fully configured, False otherwise.
+            True if infrastructure is in place, False otherwise.
         """
-        # First check if workbook is accessible
-        workbook_accessible = False
         if self._local_sheets_dir:
-            workbook_accessible = True
-        elif self._workbook_url and self._gdrive_config.is_configured(user_id):
-            workbook_accessible = True
-
-        if not workbook_accessible:
-            return False
-
-        # Workbook is accessible, now check for required config keys
-        missing_keys = self._get_missing_config_keys(user_id)
-        return len(missing_keys) == 0
+            return True
+        if self._workbook_url and self._gdrive_config.is_configured(user_id):
+            return True
+        return False
 
     def _get_missing_config_keys(self, user_id: str) -> list[str]:
         """Get list of missing required config keys.

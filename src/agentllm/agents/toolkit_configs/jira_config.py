@@ -148,6 +148,7 @@ class JiraConfig(BaseToolkitConfig):
         - "jira_token = abc123"
         - "set jira token to abc123"
         - Standalone long alphanumeric tokens (30+ characters)
+        - Optional username: "my jira token is abc123 and username is user@example.com"
 
         Args:
             message: User message that may contain JIRA token
@@ -166,6 +167,9 @@ class JiraConfig(BaseToolkitConfig):
         if not token:
             return None
 
+        # Try to extract optional username (for Jira Cloud basic auth)
+        username = self._extract_jira_username(message)
+
         logger.info(f"Validating Jira token for user {user_id}")
 
         try:
@@ -173,6 +177,7 @@ class JiraConfig(BaseToolkitConfig):
             toolkit = JiraTools(
                 token=token,
                 server_url=self._jira_server,
+                username=username,
                 default_base_jql=self._default_base_jql,
                 **self._tool_config,
             )
@@ -193,6 +198,7 @@ class JiraConfig(BaseToolkitConfig):
                     user_id=user_id,
                     token=token,
                     server_url=self._jira_server,
+                    username=username,
                 )
                 logger.info(f"Stored Jira token in database for user {user_id}")
             else:
@@ -206,9 +212,8 @@ class JiraConfig(BaseToolkitConfig):
             self._jira_toolkits[user_id] = toolkit
 
             # Return confirmation with validation message
-            return (
-                f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
-            )
+            auth_method = "basic auth" if username else "token auth"
+            return f"✅ JIRA configured successfully using {auth_method}!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
 
         except Exception as e:
             logger.error(f"Failed to validate Jira token for user {user_id}: {e}")
@@ -226,17 +231,30 @@ class JiraConfig(BaseToolkitConfig):
         if self.is_configured(user_id):
             return None
 
-        return (
-            "🔑 **JIRA Configuration Required**\n\n"
-            "To access JIRA, please provide your API token:\n\n"
-            "Say: 'My Jira token is YOUR_TOKEN_HERE'\n\n"
+        # Check if this is Jira Cloud (requires username for basic auth)
+        is_jira_cloud = "atlassian.net" in self._jira_server.lower()
+
+        prompt = "🔑 **JIRA Configuration Required**\n\nTo access JIRA, please provide your API token:\n\n"
+
+        if is_jira_cloud:
+            prompt += "Say: 'My Jira token is YOUR_TOKEN_HERE and username is YOUR_EMAIL'\n\n"
+        else:
+            prompt += "Say: 'My Jira token is YOUR_TOKEN_HERE'\n\n"
+
+        prompt += (
             "To get a JIRA API token:\n"
             f"1. Go to {self._jira_server}\n"
             "2. Click your profile icon → Account Settings\n"
             "3. Go to Security → API Tokens\n"
             "4. Create a new token and copy it\n"
-            "5. Send it to me in the format above"
         )
+
+        if is_jira_cloud:
+            prompt += "5. Send it to me with your email in the format above (Jira Cloud requires email for basic auth)"
+        else:
+            prompt += "5. Send it to me in the format above"
+
+        return prompt
 
     def get_toolkit(self, user_id: str) -> JiraTools | None:
         """Get JIRA toolkit for user if configured.
@@ -324,7 +342,8 @@ class JiraConfig(BaseToolkitConfig):
             "jira",
             "issue",
             "ticket",
-            "issues.redhat.com",
+            "issues.redhat.com",  # Legacy URL (keep for backward compat)
+            "redhat.atlassian.net",  # New URL
         ]
 
         message_lower = message.lower()
@@ -501,5 +520,27 @@ class JiraConfig(BaseToolkitConfig):
             has_numbers = bool(re.search(r"[0-9]", potential_token))
             if has_letters and has_numbers:
                 return potential_token
+
+        return None
+
+    def _extract_jira_username(self, message: str) -> str | None:
+        """Extract JIRA username from user message (for Jira Cloud basic auth).
+
+        Args:
+            message: User message text
+
+        Returns:
+            Extracted username/email or None if not found
+        """
+        # Pattern: "username is user@example.com" or "email is user@example.com"
+        patterns = [
+            r"(?:username|email)\s+(?:is|=|:)\s+([^\s]+@[^\s]+)",
+            r"(?:and|with)\s+(?:username|email)\s+([^\s]+@[^\s]+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                return match.group(1)
 
         return None

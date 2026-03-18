@@ -18,7 +18,7 @@ This script attempts to:
 Usage:
     # Set environment variables first:
     export JIRA_TOKEN="your_jira_token"
-    export JIRA_USERNAME="your_username"  # Optional
+    export JIRA_USERNAME="your_username"  # Optional, for basic auth
 
     # Then run:
     uv run examples/test_rich_filter_access.py

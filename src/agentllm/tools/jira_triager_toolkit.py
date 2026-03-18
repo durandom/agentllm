@@ -35,6 +35,7 @@ class JiraTriagerTools(Toolkit):
         jira_token: str,
         jira_url: str,
         team_assignee_map: dict[str, list[str]] | None = None,
+        jira_username: str | None = None,
     ):
         """
         Initialize the Jira Triager toolkit.
@@ -43,11 +44,13 @@ class JiraTriagerTools(Toolkit):
             jira_token: Jira API token for authentication
             jira_url: Jira server URL
             team_assignee_map: Map of team names to member names (for assignee lookup)
+            jira_username: Jira username/email for basic auth (optional)
         """
         super().__init__(name="jira_triager_tools")
 
         self.jira_token = jira_token
         self.jira_url = jira_url
+        self.jira_username = jira_username
         self.team_assignee_map = team_assignee_map or {}
 
         # Jira client (lazy loaded)
@@ -65,7 +68,13 @@ class JiraTriagerTools(Toolkit):
         """Get or create the Jira client."""
         if self._jira_client is None:
             logger.debug(f"Connecting to Jira at {self.jira_url}")
-            self._jira_client = JIRA(server=self.jira_url, token_auth=self.jira_token)
+            # Use basic auth if username provided, otherwise token auth
+            if self.jira_username:
+                logger.debug("Using basic auth (username + token)")
+                self._jira_client = JIRA(server=self.jira_url, basic_auth=(self.jira_username, self.jira_token))
+            else:
+                logger.debug("Using token auth")
+                self._jira_client = JIRA(server=self.jira_url, token_auth=self.jira_token)
         return self._jira_client
 
     def _clean_jira_description(self, text: str | None) -> str:
@@ -168,7 +177,7 @@ class JiraTriagerTools(Toolkit):
             # Extract current team
             current_team = override_team if override_team is not None else None
             if current_team is None:
-                team_field = getattr(fields, "customfield_12313240", None)
+                team_field = getattr(fields, "customfield_10001", None)
                 if team_field is not None and hasattr(team_field, "name"):
                     current_team = team_field.name
                 elif isinstance(team_field, dict) and "name" in team_field:

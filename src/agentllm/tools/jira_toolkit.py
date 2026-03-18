@@ -1277,7 +1277,7 @@ class JiraTools(Toolkit):
 
         Args:
             issue_key: The Jira issue key (e.g., "RHIDP-6496") (keyword-only)
-            team: (keyword-only) Team ID as a plain string (custom field customfield_12313240).
+            team_id: (keyword-only) Team ID as a plain string (custom field customfield_10001).
                   Use team ID from team_id_map. Example: "4267"
             components: (keyword-only) Comma-separated list of component names to set
             summary: (keyword-only) New summary/title for the issue (only pass if updating)
@@ -1297,7 +1297,7 @@ class JiraTools(Toolkit):
 
             # Team field (custom field)
             if team_id is not None:
-                fields["customfield_12313240"] = team_id
+                fields["customfield_10001"] = team_id
                 logger.debug(f"Setting team to: {team_id}")
 
             # Components

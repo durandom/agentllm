@@ -9,9 +9,11 @@ Analyzes Jira tickets and recommends team/component assignments using component 
 **Prerequisites**: Jira API token + Google Drive OAuth + `JIRA_TRIAGER_GDRIVE_FOLDER_ID` env var
 
 **First Use**:
-1. Provide Jira token: `my jira token is TOKEN_HERE and server is https://issues.redhat.com`
+1. Provide Jira token: `my jira token is TOKEN_HERE`
 2. Authorize Google Drive (OAuth URL provided by agent)
 3. Start triaging: `Triage RHIDP-8796`
+
+**Note**: Server URL is configured via deployment config (default: https://issues.redhat.com)
 
 ## Usage
 

@@ -165,11 +165,22 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
             # Automation mode: Get credentials from environment variables
             if not self.token_storage:
                 jira_token_str = os.getenv("JIRA_API_TOKEN")
-                jira_server = os.getenv("JIRA_SERVER_URL", "https://issues.redhat.com")
+                jira_username_str = os.getenv("JIRA_USERNAME")
+                jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net/")
                 if not jira_token_str:
                     logger.error("No JIRA_API_TOKEN found in environment (automation mode)")
                     return None
-                token_data = {"token": jira_token_str, "server_url": jira_server}
+
+                # Check if Jira Cloud requires username for basic auth
+                is_jira_cloud = "atlassian.net" in jira_server.lower()
+                if is_jira_cloud and not jira_username_str:
+                    logger.error(
+                        f"Jira Cloud ({jira_server}) requires JIRA_USERNAME for basic auth. "
+                        "Please set JIRA_USERNAME environment variable (e.g., your email address)."
+                    )
+                    return None
+
+                token_data = {"token": jira_token_str, "server_url": jira_server, "username": jira_username_str}
                 logger.info(f"Using JIRA_API_TOKEN from environment for user {user_id}")
             # Interactive mode: Get credentials from token storage
             else:
@@ -177,6 +188,15 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                 if not token_data:
                     logger.error(f"No Jira token found for user {user_id}")
                     return None
+
+                # Check if Jira Cloud requires username for basic auth
+                server_url = token_data.get("server_url", "")
+                is_jira_cloud = "atlassian.net" in server_url.lower()
+                if is_jira_cloud and not token_data.get("username"):
+                    logger.warning(
+                        f"Jira Cloud ({server_url}) typically requires username for basic auth. "
+                        f"User {user_id} has no username stored. Falling back to token auth (may fail)."
+                    )
 
             # Get team_assignee_map from config
             config = self._user_configs.get(user_id, {})
@@ -187,6 +207,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                 jira_token=token_data["token"],
                 jira_url=token_data["server_url"],
                 team_assignee_map=team_assignee_map,
+                jira_username=token_data.get("username"),  # Optional for basic auth
             )
 
             # Cache the toolkit
@@ -320,7 +341,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
 
         return instructions
 
-    def _load_configuration_from_file(self, user_id: str) -> dict | None:
+    def _load_configuration_from_file(self, _user_id: str) -> dict | None:
         """Load configuration from local file.
 
         Loads configuration from the local rhdh-teams.json file specified by
@@ -342,7 +363,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
         - allowed_teams: list of team names
 
         Args:
-            user_id: User identifier
+            _user_id: User identifier (unused, for API consistency)
 
         Returns:
             Configuration dictionary, or None if loading fails

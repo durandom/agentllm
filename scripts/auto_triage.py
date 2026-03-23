@@ -17,6 +17,9 @@ Usage:
     # JSON output for CI/CD
     python scripts/auto_triage.py --apply --json-output
 
+    # Basic auth mode
+    JIRA_USERNAME=user@example.com JIRA_API_TOKEN=token python scripts/auto_triage.py --apply
+
 Exit Codes:
     0 - Success (all applied successfully)
     1 - Failures (some updates failed)
@@ -178,15 +181,19 @@ def build_ticket_details(recommendations: list[dict], token_storage, user_id: st
     """
     from jira import JIRA
 
+    unique_tickets = len(set(rec["ticket"] for rec in recommendations))
+    logger.info(f"Building ticket details for {len(recommendations)} recommendations across {unique_tickets} tickets")
+
     # Get Jira credentials from environment or database
     if token_storage is None:
         # Use environment variables
         jira_token_str = os.getenv("JIRA_API_TOKEN")
-        jira_server = os.getenv("JIRA_SERVER_URL", "https://issues.redhat.com")
+        jira_username = os.getenv("JIRA_USERNAME")
+        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net/")
         if not jira_token_str:
             logger.error("No JIRA_API_TOKEN found in environment")
             return []
-        jira_token = {"token": jira_token_str, "server_url": jira_server}
+        jira_token = {"token": jira_token_str, "server_url": jira_server, "username": jira_username}
     else:
         # Use database
         jira_token = token_storage.get_token("jira", user_id)
@@ -195,7 +202,14 @@ def build_ticket_details(recommendations: list[dict], token_storage, user_id: st
             return []
 
     try:
-        jira = JIRA(server=jira_token["server_url"], token_auth=jira_token["token"])
+        # Use basic auth if username provided, otherwise token auth
+        if jira_token.get("username"):
+            logger.debug(f"Using basic auth (username + token) to connect to {jira_token['server_url']}")
+            jira = JIRA(server=jira_token["server_url"], basic_auth=(jira_token["username"], jira_token["token"]))
+        else:
+            logger.debug(f"Using token auth to connect to {jira_token['server_url']}")
+            jira = JIRA(server=jira_token["server_url"], token_auth=jira_token["token"])
+        logger.debug("Successfully connected to Jira")
     except Exception as e:
         logger.error(f"Failed to connect to Jira for fetching titles: {e}")
         return []
@@ -313,17 +327,22 @@ def apply_recommendations(recommendations: list[dict], token_storage, user_id: s
     """
     from jira import JIRA
 
+    unique_tickets = len(set(rec["ticket"] for rec in recommendations))
+    logger.info(f"Applying {len(recommendations)} recommendations to {unique_tickets} tickets")
+
     team_id_map = load_team_id_map()
+    logger.debug(f"Loaded team ID map with {len(team_id_map)} teams")
 
     # Get Jira credentials from environment or database
     if token_storage is None:
         # Use environment variables
         jira_token_str = os.getenv("JIRA_API_TOKEN")
-        jira_server = os.getenv("JIRA_SERVER_URL", "https://issues.redhat.com")
+        jira_username = os.getenv("JIRA_USERNAME")
+        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net/")
         if not jira_token_str:
             logger.error("No JIRA_API_TOKEN found in environment")
             return {"applied": [], "failed": recommendations}
-        jira_token = {"token": jira_token_str, "server_url": jira_server}
+        jira_token = {"token": jira_token_str, "server_url": jira_server, "username": jira_username}
     else:
         # Use database
         jira_token = token_storage.get_token("jira", user_id)
@@ -332,7 +351,13 @@ def apply_recommendations(recommendations: list[dict], token_storage, user_id: s
             return {"applied": [], "failed": recommendations}
 
     try:
-        jira = JIRA(server=jira_token["server_url"], token_auth=jira_token["token"])
+        # Use basic auth if username provided, otherwise token auth
+        if jira_token.get("username"):
+            logger.debug(f"Using basic auth (username + token) to connect to {jira_token['server_url']}")
+            jira = JIRA(server=jira_token["server_url"], basic_auth=(jira_token["username"], jira_token["token"]))
+        else:
+            logger.debug(f"Using token auth to connect to {jira_token['server_url']}")
+            jira = JIRA(server=jira_token["server_url"], token_auth=jira_token["token"])
     except Exception as e:
         logger.error(f"Failed to connect to Jira: {e}")
         return {"applied": [], "failed": recommendations}
@@ -363,7 +388,7 @@ def apply_recommendations(recommendations: list[dict], token_storage, user_id: s
                 if field == "team":
                     team_id = team_id_map.get(recommended)
                     if team_id:
-                        update_fields["customfield_12313240"] = team_id
+                        update_fields["customfield_10001"] = team_id
                     else:
                         logger.error(f"Unknown team name '{recommended}' - not found in team_id_map")
                         continue

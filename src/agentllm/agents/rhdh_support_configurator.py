@@ -79,7 +79,7 @@ class RHDHSupportConfigurator(AgentConfigurator):
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
         jira_config = JiraConfig(
-            jira_server="https://issues.redhat.com",
+            jira_server="https://redhat.atlassian.net",
             token_storage=self._token_storage,
         )
         rhcp_config = RHCPConfig(token_storage=self._token_storage)

@@ -55,7 +55,7 @@ class JiraConfig(BaseToolkitConfig):
 
     def __init__(
         self,
-        jira_server: str = "https://issues.redhat.com",
+        jira_server: str = "https://redhat.atlassian.net",
         default_base_jql: str = "",
         token_storage=None,
         # Tool enablement flags (defaults: all read tools enabled, write tools disabled)
@@ -274,10 +274,13 @@ class JiraConfig(BaseToolkitConfig):
         # Fallback: Check for JIRA_API_TOKEN environment variable (automation mode)
         env_token = os.getenv("JIRA_API_TOKEN")
         if env_token:
-            logger.info(f"Using JIRA_API_TOKEN from environment for user {user_id}")
+            env_username = os.getenv("JIRA_USERNAME")
+            auth_method = "basic auth" if env_username else "token auth"
+            logger.info(f"Using JIRA_API_TOKEN from environment for user {user_id} ({auth_method})")
             toolkit = JiraTools(
                 token=env_token,
                 server_url=self._jira_server,
+                username=env_username,
                 default_base_jql=self._default_base_jql,
                 **self._tool_config,
             )

@@ -189,7 +189,7 @@ def build_ticket_details(recommendations: list[dict], token_storage, user_id: st
         # Use environment variables
         jira_token_str = os.getenv("JIRA_API_TOKEN")
         jira_username = os.getenv("JIRA_USERNAME")
-        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net/")
+        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net")
         if not jira_token_str:
             logger.error("No JIRA_API_TOKEN found in environment")
             return []
@@ -338,7 +338,7 @@ def apply_recommendations(recommendations: list[dict], token_storage, user_id: s
         # Use environment variables
         jira_token_str = os.getenv("JIRA_API_TOKEN")
         jira_username = os.getenv("JIRA_USERNAME")
-        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net/")
+        jira_server = os.getenv("JIRA_SERVER_URL", "https://redhat.atlassian.net")
         if not jira_token_str:
             logger.error("No JIRA_API_TOKEN found in environment")
             return {"applied": [], "failed": recommendations}

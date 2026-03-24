@@ -93,7 +93,7 @@ spec:
             - name: JIRA_TRIAGER_CONFIG_FILE
               value: "/config/rhdh-teams.json"
             - name: JIRA_SERVER_URL
-              value: "https://issues.redhat.com"
+              value: "https://redhat.atlassian.net"
 
             # Triage mode
             - name: DRY_RUN
